@@ -42,7 +42,7 @@ in_poly <- function(point, vertices) {
   }
 
   # Ensure vertices form a closed polygon by appending the first vertex to the end
-  vertices <- dplyr::rbind(vertices, vertices[1,])
+  vertices <- rbind(vertices, vertices[1,])
 
   # Ray-casting algorithm
   intersect_count <- 0
