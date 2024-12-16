@@ -1,3 +1,6 @@
+# NEED TO INCORPORATE CONVENTIONAL MODEL (OMIT ALL MARKING PROCESSES)
+
+
 #' Fit the generalized categorical spatial mark resight model. SMR_move fits the activity centers to cameras and snares separately whereas SMR fits them concurrently.
 #'
 #' Allowing for activity center relocation (act_center = "move") means the model
@@ -5,7 +8,6 @@
 #' sighting phases. If the data are sparse, there is no telemetry data, or if
 #' the study period is short, it may better to not allow for activity center
 #' relocation (act_center = "no move").
-#'
 #'
 #' @param data a data list as formatted by sim.genCatSMR(). See description for more details.
 #' @param input Model definitions and inputs
@@ -15,7 +17,7 @@
 #'
 #' the data list should be formatted to match the list outputted by
 #' sim.genCatSMR(), but not all elements of that object are necessary.
-#' y.mark, y.sight.marked, y.sight.unmarked, G.marked, and G.unmarked are necessary
+#' y_mark, y_sight_marked, y_sight_unmarked, G_marked, and G_unmarked are necessary
 #' list elements. y.sight.x and G.x for x=unk and marke.noID are necessary if there are samples
 #' of unknown marked status or samples from marked samples without individual identities.
 #'
@@ -46,7 +48,7 @@
 #' individual, tf1 should be a matrix of dimension M x J1 indicating how many
 #' of the K1 occasions individual i was exposed to at trap j. This allows known
 #' additions or removals during the marking process to be accounted for.
-#' Exposure for the n.marked+1 ... M uncaptured individuals should be the
+#' Exposure for the n_marked+1 ... M uncaptured individuals should be the
 #' same as the number of occasions each trap was operational. We can't account for unknown
 #' additions and removals.
 #' "tf2" a trap operation vector or matrix for the sighting process. If exposure to capture does
@@ -56,16 +58,17 @@
 #' of the K2 occasions individual i was exposed to at trap j. This allows
 #' known additions or removals between the marking and sighting processes and
 #' during the sighting process to be accounted for. Exposure for
-#' the n.marked+1 ... M uncaptured individuals should be the
+#' the n_marked+1 ... M uncaptured individuals should be the
 #' same as the number of occasions each trap was operational. We can't account for unknown
 #' additions and removals.
-#' "X1", a matrix of marking coordinates, an element "X2", a matrix of sighting coordinates, ,
+#' "X1" is a matrix of marking coordinates
+#' "X2" is a matrix of sighting coordinates, ,
 #' "K1", the integer number of marking occasions, and an element "K2",
 #' the integer number of sighting occasions are necessary.
 #' "IDlist" is a list containing elements ncat and IDcovs. ncat is an integer for the number
 #' of categorical identity covariates and IDcovs is a list of length ncat with elements containing the
 #' values each categorical identity covariate may take.
-#' "locs" is an n.marked x nloc x  2 array of telemetry locations is optional. This array can
+#' "locs" is an n_marked x nloc x  2 array of telemetry locations is optional. This array can
 #' have missing values if not all individuals have the same number of locations
 #' and the entry for individuals with no telemetry should all be missing values (coded NA).
 #' "markedS" is required if marking and sighting sessions are interspersed. This is a
@@ -84,7 +87,7 @@
 #'
 #' @export
 #'
-mcmc.genCatSMR.move <- function(
+mcmc_SMR <- function(
   data,
   input = list(
     niter = 2400, nburn = 1200, nthin = 5, M = 200, act_center = "no move",
@@ -93,12 +96,15 @@ mcmc.genCatSMR.move <- function(
     obstype = c("bernoulli", "poisson"), nswap = NA,
     proppars = list(lam0.mark = 0.05, lam0.sight = 0.1, sigma_d = 0.02,
                     sigma_p = 0.2, s1 = 0.5, s2 = 0.25, s2t = 0.1),
+    max_proppars <- list(lam0.mark = 100, lam0.sight = 100, sigma_d = 100,
+                         sigma_p = 100, s1 = 100, s2 = 100, s2t = 100),
+    min_proppars <- list(lam0.mark = .001, lam0.sight = .001, sigma_d = .001,
+                         sigma_p = .001, s1 = .001, s2 = .001, s2t = .001),
     storeLatent = TRUE, storeGamma = TRUE, IDup = "Gibbs", tf1 = NA, tf2 = NA
   )
 ){
-  max_proppars <- list(lam0.mark = 100, lam0.sight = 100, sigma_d = 100, sigma_p = 100, s1 = 100, s2 = 100, s2t = 100)
-  min_proppars <- list(lam0.mark = .001, lam0.sight = .001, sigma_d = .001, sigma_p = .001, s1 = .001, s2 = .001, s2t = .001)
 
+  # Retrieve input parms
   niter <- input$niter
   nburn <- input$nburn
   nthin <- input$nthin
@@ -118,6 +124,8 @@ mcmc.genCatSMR.move <- function(
 
   # List of proposal distribution tuning parameters for lam0, sigma, s, and st
   proppars <- input$proppars
+  max_proppars <- input$max_proppars
+  min_proppars <- input$min_proppars
 
   # A logical indicator to store posteriors for the latent individual identities
   # and gamma
@@ -129,13 +137,12 @@ mcmc.genCatSMR.move <- function(
   # For obstype = "bernoulli", "MH" must be used
   IDup <- input$IDup
   tf <- input$tf
-  priors <- input$priors
-
+  # priors <- input$priors
 
   # Initializations
-  y.mark <- data$y.mark
-  y.sight.marked <- data$y.sight.marked
-  y.sight.unmarked <- data$y.sight.unmarked
+  y_mark <- data$y_mark
+  y_sight_marked <- data$y_sight_marked
+  y_sight_unmarked <- data$y_sight_unmarked
   X1 <- as.matrix(data$X1)
   X2 <- as.matrix(data$X2)
   J1 <- nrow(X1)
@@ -147,9 +154,8 @@ mcmc.genCatSMR.move <- function(
   IDcovs <- data$IDlist$IDcovs
   buff <- data$buff
   Xall <- rbind(X1, X2)
-  # n.samp.latent<-nrow(y.sight.unmarked)
-  n.marked <- nrow(y.mark)
-  G.marked <- data$G.marked
+  n_marked <- data$n_marked
+  G_marked <- data$G_marked
 
   tune_parms <- c("lam0.mark", "lam0.sight", "sigma_p", "sigma_d", "s1", "s2")
 
@@ -163,74 +169,85 @@ mcmc.genCatSMR.move <- function(
   tune.check <- 50
   batch_n <- 10
 
-  if (any(is.na(G.marked)) | any(is.na(G.unmarked))) {
+  if ("G_unmarked" %in% names(data)) {
+    G_unmarked <- data$G_unmarked
+    if (length(dim(y.sight.unmarked)) != 3) {
+      stop("dim(y.sight.unmarked) must be 3. Reduced to 2 during initialization")
+    }
+    useUM <- TRUE
+  } else {
+    G_unmarked <- matrix(0, nrow = 0, ncol = ncat)
+    useUM <- FALSE
+  }
+
+  if (any(is.na(G_marked)) | any(is.na(G_unmarked))) {
     stop("Code missing IDcovs with a 0")
   }
-  if (!is.matrix(G.marked)) {
-    G.marked <- matrix(G.marked)
+  if (!is.matrix(G_marked)) {
+    G_marked <- matrix(G_marked)
   }
-  if (!is.matrix(G.unmarked)) {
-    G.marked <- matrix(G.unmarked)
+  if (!is.matrix(G_unmarked)) {
+    G_marked <- matrix(G_unmarked)
   }
   if (!is.list(IDcovs)) {
     stop("IDcovs must be a list")
   }
   nlevels <- unlist(lapply(IDcovs, length))
-  if (ncol(G.marked) != ncat) {
-    stop("G.marked needs ncat number of columns")
+  if (ncol(G_marked) != ncat) {
+    stop("G_marked needs ncat number of columns")
   }
-  if (ncol(G.unmarked) != ncat) {
-    stop("G.unmarked needs ncat number of columns")
+  if (ncol(G_unmarked) != ncat) {
+    stop("G_unmarked needs ncat number of columns")
   }
   # Are there unknown marked status guys?
   useUnk <- FALSE
-  if ("G.unk" %in% names(data)) {
-    if (!is.na(data$G.unk[1])) {
-      G.unk <- data$G.unk
-      if (!is.matrix(G.unk)) {
-        G.marked <- matrix(G.unk)
+  if ("G_unk" %in% names(data)) {
+    if (!is.na(data$G_unk[1])) {
+      G_unk <- data$G_unk
+      if (!is.matrix(G_unk)) {
+        G_marked <- matrix(G_unk)
       }
-      if (ncol(G.unk) != ncat) {
-        stop("G.unk needs ncat number of columns")
+      if (ncol(G_unk) != ncat) {
+        stop("G_unk needs ncat number of columns")
       }
-      y.sight.unk <- data$y.sight.unk
+      y_sight_unk <- data$y_sight_unk
       useUnk <- TRUE
     }
   }
   # Are there marked no ID guys?
   useMarkednoID <- FALSE
-  if ("G.marked.noID" %in% names(data)) {
-    if (!is.na(data$G.marked.noID[1])) {
-      G.marked.noID <- data$G.marked.noID
-      if (!is.matrix(G.marked.noID)) {
-        G.marked.noID <- matrix(G.marked.noID)
+  if ("G_marked.noID" %in% names(data)) {
+    if (!is.na(data$G_marked.noID[1])) {
+      G_marked.noID <- data$G_marked.noID
+      if (!is.matrix(G_marked.noID)) {
+        G_marked.noID <- matrix(G_marked.noID)
       }
-      if (ncol(G.marked.noID) != ncat) {
-        stop("G.marked.noID needs ncat number of columns")
+      if (ncol(G_marked.noID) != ncat) {
+        stop("G_marked.noID needs ncat number of columns")
       }
-      y.sight.marked.noID <- data$y.sight.marked.noID
+      y_sight_marked_noID <- data$y_sight_marked_noID
       useMarkednoID <- TRUE
     }
   }
 
   # data checks
-  if (length(dim(y.mark)) != 3) {
-    stop("dim(y.mark) must be 3. Reduced to 2 during initialization")
+  if (length(dim(y_mark)) != 3 & !is.null(y_mark)) {
+    stop("dim(y_mark) must be 3. Reduced to 2 during initialization")
   }
-  if (length(dim(y.sight.marked)) != 3) {
-    stop("dim(y.sight.marked) must be 3. Reduced to 2 during initialization")
+  if (length(dim(y_sight_marked)) != 3) {
+    stop("dim(y_sight_marked) must be 3. Reduced to 2 during initialization")
   }
-  if (length(dim(y.sight.unmarked)) != 3) {
-    stop("dim(y.sight.unmarked) must be 3. Reduced to 2 during initialization")
+  if (length(dim(y_sight_unmarked)) != 3) {
+    stop("dim(y_sight_unmarked) must be 3. Reduced to 2 during initialization")
   }
   if (useUnk) {
-    if (length(dim(y.sight.unk)) != 3) {
-      stop("dim(y.sight.unk) must be 3. Reduced to 2 during initialization")
+    if (length(dim(y_sight_unk)) != 3) {
+      stop("dim(y_sight_unk) must be 3. Reduced to 2 during initialization")
     }
   }
   if (useMarkednoID) {
-    if (length(dim(y.sight.marked.noID)) != 3) {
-      stop("dim(y.sight.marked.noID) must be 3. Reduced to 2 during initialization")
+    if (length(dim(y_sight_marked_noID)) != 3) {
+      stop("dim(y_sight_marked_noID) must be 3. Reduced to 2 during initialization")
     }
   }
   if (!IDup %in% c("MH", "Gibbs")) {
@@ -265,30 +282,30 @@ mcmc.genCatSMR.move <- function(
   gamma <- inits$gamma
 
   if (useUnk & !useMarkednoID) {
-    G.use <- rbind(G.unmarked, G.unk)
-    status <- c(rep(2, nrow(G.unmarked)), rep(0, nrow(G.unk)))
+    G.use <- rbind(G_unmarked, G_unk)
+    status <- c(rep(2, nrow(G_unmarked)), rep(0, nrow(G_unk)))
     G.use <- cbind(G.use, status)
-    G.marked <- cbind(G.marked, rep(1, nrow(G.marked)))
+    G_marked <- cbind(G_marked, rep(1, nrow(G_marked)))
     ncat <- ncat + 1
-    y.sight.latent <- abind::abind(y.sight.unmarked, y.sight.unk, along = 1)
+    y.sight.latent <- abind::abind(y_sight_unmarked, y_sight_unk, along = 1)
   } else if (!useUnk & useMarkednoID) {
-    G.use <- rbind(G.unmarked, G.marked.noID)
-    status <- c(rep(2, nrow(G.unmarked)), rep(1, nrow(G.marked.noID)))
+    G.use <- rbind(G_unmarked, G_marked.noID)
+    status <- c(rep(2, nrow(G_unmarked)), rep(1, nrow(G_marked.noID)))
     G.use <- cbind(G.use, status)
-    G.marked <- cbind(G.marked, rep(1, nrow(G.marked)))
+    G_marked <- cbind(G_marked, rep(1, nrow(G_marked)))
     ncat <- ncat + 1
-    y.sight.latent <- abind::abind(y.sight.unmarked, y.sight.marked.noID, along = 1)
+    y.sight.latent <- abind::abind(y_sight_unmarked, y_sight_marked_noID, along = 1)
   } else if (useUnk & useMarkednoID) {
-    G.use <- rbind(G.unmarked, G.unk, G.marked.noID)
-    status <- c(rep(2, nrow(G.unmarked)), rep(0, nrow(G.unk)), rep(1, nrow(G.marked.noID)))
+    G.use <- rbind(G_unmarked, G_unk, G_marked.noID)
+    status <- c(rep(2, nrow(G_unmarked)), rep(0, nrow(G_unk)), rep(1, nrow(G_marked.noID)))
     G.use <- cbind(G.use, status)
-    G.marked <- cbind(G.marked, rep(1, nrow(G.marked)))
+    G_marked <- cbind(G_marked, rep(1, nrow(G_marked)))
     ncat <- ncat + 1
     nlevels <- c(nlevels, 2)
-    y.sight.latent <- abind::abind(y.sight.unmarked, y.sight.unk, y.sight.marked.noID, along = 1)
+    y.sight.latent <- abind::abind(y_sight_unmarked, y_sight_unk, y_sight_marked_noID, along = 1)
   } else {
-    G.use <- G.unmarked
-    y.sight.latent <- y.sight.unmarked
+    G.use <- G_unmarked
+    y.sight.latent <- y_sight_unmarked
   }
   n.samp.latent <- nrow(y.sight.latent) # number of unmarked individuals + uncertainty
   if (is.na(nswap)) {
@@ -327,14 +344,16 @@ mcmc.genCatSMR.move <- function(
     }
   }
 
-  ### marking occasion order constraints
+  #######################
+  # not in concat
+  # marking occasion order constraints
   Kconstraints <- matrix(0, nrow = M, ncol = n.samp.latent)
   if ("markedS" %in% names(data)) {
     markedS <- data$markedS
   } else {
-    markedS <- matrix(1, nrow = n.marked, ncol = K2)
+    markedS <- matrix(1, nrow = n_marked, ncol = K2)
   }
-  for (i in 1:n.marked) {
+  for (i in 1:n_marked) {
     for (j in 1:n.samp.latent) {
       occ <- which(apply(y.sight.latent[j, , ], 2, sum) > 0)
       if (markedS[i, occ] == 1) {
@@ -344,12 +363,13 @@ mcmc.genCatSMR.move <- function(
       }
     }
   }
+  #######################
 
-  # Build y.sight.true
-  y.sight.true <- array(0, dim = c(M, J2, K2))
-  y.sight.true[1:n.marked, , ] <- y.sight.marked
+  # Build y_sight_true
+  y_sight_true <- array(0, dim = c(M, J2, K2))
+  y_sight_true[1:n_marked, , ] <- y_sight_marked
   ID <- rep(NA, n.samp.latent)
-  idx <- n.marked + 1
+  idx <- n_marked + 1
 
   # assign all unmarked and unk samples to unmarked guys first
   for (i in 1:n.samp.latent) {
@@ -360,13 +380,13 @@ mcmc.genCatSMR.move <- function(
       stop("Need to raise M to initialize y.true")
     }
     traps <- which(rowSums(y.sight.latent[i, , ]) > 0)
-    y.sight.true2D <- apply(y.sight.true, c(1, 2), sum)
+    y_sight_true2D <- apply(y_sight_true, c(1, 2), sum)
     if (length(traps) == 1) {
-      cand <- which(y.sight.true2D[, traps] > 0) # guys caught at same traps
+      cand <- which(y_sight_true2D[, traps] > 0) # guys caught at same traps
     } else {
-      cand <- which(rowSums(y.sight.true2D[, traps]) > 0) # guys caught at same traps
+      cand <- which(rowSums(y_sight_true2D[, traps]) > 0) # guys caught at same traps
     }
-    cand <- cand[cand > n.marked]
+    cand <- cand[cand > n_marked]
     if (length(cand) > 0) {
       if (length(cand) > 1) { # if more than 1 ID to match to, choose first one
         cand <- cand[1]
@@ -375,31 +395,35 @@ mcmc.genCatSMR.move <- function(
       cands <- which(ID %in% cand) # everyone assigned this ID
       if (all(constraints[i, cands] == 1)) {
         # focal consistent with all partials already assigned and consistent with marked guy capture occasion
-        y.sight.true[cand, , ] <- y.sight.true[cand, , ] + y.sight.latent[i, , ]
+        y_sight_true[cand, , ] <- y_sight_true[cand, , ] + y.sight.latent[i, , ]
         ID[i] <- cand
       } else { # focal not consistent
-        y.sight.true[idx, , ] <- y.sight.latent[i, , ]
+        y_sight_true[idx, , ] <- y.sight.latent[i, , ]
         ID[i] <- idx
         idx <- idx + 1
       }
     } else { # no assigned samples at this trap
-      y.sight.true[idx, , ] <- y.sight.latent[i, , ]
+      y_sight_true[idx, , ] <- y.sight.latent[i, , ]
       ID[i] <- idx
       idx <- idx + 1
     }
   }
 
+  ###################################
   # assign marked unknown ID guys
+  ###################################
   if (useMarkednoID) { # Need to initialize these guys to marked guys
     fix <- which(status == 1)
-    meanloc <- matrix(NA, nrow = n.marked, ncol = 2)
-    for (i in 1:n.marked) {
-      trap1 <- which(rowSums(y.mark[i, , ]) > 0)
-      trap2 <- which(rowSums(y.sight.marked[i, , ]) > 0)
-      locs2 <- matrix(0, nrow = 0, ncol = 2)
-      if (length(trap1) > 0) {
-        locs2 <- rbind(locs2, X1[trap1, ])
+    meanloc <- matrix(NA, nrow = n_marked, ncol = 2)
+    for (i in 1:n_marked) {
+        locs2 <- matrix(0, nrow = 0, ncol = 2)
+      if (!is.null(y_mark)) {
+        trap1 <- which(rowSums(y_mark[i, , ]) > 0)
+        if (length(trap1) > 0) {
+          locs2 <- rbind(locs2, X1[trap1, ])
+        }
       }
+      trap2 <- which(rowSums(y_sight_marked[i, , ]) > 0)
       if (length(trap2) > 0) {
         locs2 <- rbind(locs2, X2[trap2, ])
       }
@@ -409,69 +433,77 @@ mcmc.genCatSMR.move <- function(
         meanloc[i, ] <- locs2
       }
     }
-    for (i in 1:nrow(G.marked.noID)) {
+    for (i in 1:nrow(G_marked.noID)) {
       trap <- which(rowSums(y.sight.latent[i, , ]) > 0)
-      compatible <- rep(FALSE, n.marked)
-      for (j in 1:n.marked) {
-        nonzero1 <- G.marked[j, 1:(ncat - 1)] != 0
-        nonzero2 <- G.marked.noID[i, ] != 0
+      compatible <- rep(FALSE, n_marked)
+      for (j in 1:n_marked) {
+        nonzero1 <- G_marked[j, 1:(ncat - 1)] != 0
+        nonzero2 <- G_marked.noID[i, ] != 0
         nonzero <- which(nonzero1 & nonzero2)
-        if (all(G.marked[j, nonzero] == G.marked.noID[i, nonzero])) {
+        if (all(G_marked[j, nonzero] == G_marked.noID[i, nonzero])) {
           compatible[j] <- TRUE
         }
       }
       if (all(compatible == FALSE)) {
-        stop(paste("No G.marked compatible with G.marked.noID "), i)
+        stop(paste("No G_marked compatible with G_marked.noID "), i)
       }
       dists <- sqrt((X2[trap, 1] - meanloc[, 1])^2 + (X2[trap, 2] - meanloc[, 2])^2)
       dists[!compatible] <- Inf
-      dists[which(Kconstraints[1:n.marked, fix[i]] == 0)] <- Inf # Exclude guys not marked yet
+      dists[which(Kconstraints[1:n_marked, fix[i]] == 0)] <- Inf # Exclude guys not marked yet
       if (all(is.finite(dists) == FALSE)) {
-        stop(paste("No G.marked compatible with G.marked.noID "), i)
+        stop(paste("No G_marked compatible with G_marked.noID "), i)
       }
       ID[fix[i]] <- which(dists == min(dists, na.rm = TRUE))[1]
-      y.sight.true[ID[fix[i]], , ] <- y.sight.true[ID[fix[i]], , ] + y.sight.latent[fix[i], , ]
+      y_sight_true[ID[fix[i]], , ] <- y_sight_true[ID[fix[i]], , ] + y.sight.latent[fix[i], , ]
     }
   }
   if (binconstraints) {
-    if (any(y.sight.true > 1)) stop("bernoulli data not initialized correctly")
+    if (any(y_sight_true > 1)) stop("bernoulli data not initialized correctly")
   }
 
   # Check assignment consistency with constraints
   checkID <- unique(ID)
-  checkID <- checkID[checkID > n.marked]
+  checkID <- checkID[checkID > n_marked]
   for (i in 1:length(checkID)) {
     idx <- which(ID == checkID[i])
     if (!all(constraints[idx, idx] == 1)) {
       stop("ID initialized improperly")
     }
   }
+
+  #######################
+  # not in concat
   # Check marked guy k constraints
   if (any(data$markedS == 0 | data$markedS == 2)) {
-    check <- which(ID <= n.marked)
+    check <- which(ID <= n_marked)
     for (i in check) {
       if (Kconstraints[ID[i], i] == 0) {
         stop("ID initialized improperly for marked no ID samples")
       }
     }
   }
-  y.sight.true <- apply(y.sight.true, c(1, 2), sum)
-  y.mark <- abind::abind(y.mark, array(0, dim = c(M - n.marked, J1, K1)), along = 1)
-  y.mark2D <- apply(y.mark, c(1, 2), sum)
-  known.vector <- c(rep(1, n.marked), rep(0, M - n.marked))
-  known.vector[(n.marked + 1):M] <- 1 * (rowSums(y.sight.true[(n.marked + 1):M, ]) > 0)
+  #######################
+
+  y_sight_true <- apply(y_sight_true, c(1, 2), sum)
+  #######################
+  # not in concat
+  y_mark <- pad_matrix(y_mark, dims = c(M, J1, K1))
+  y_mark2D <- apply(y_mark, c(1, 2), sum)
+  #######################
+  known_vector <- c(rep(1, n_marked), rep(0, M - n_marked))
+  known_vector[(n_marked + 1):M] <- 1 * (rowSums(y_sight_true[(n_marked + 1):M, ]) > 0)
 
   # Initialize z
-  z <- 1 * (known.vector > 0)
+  z <- 1 * (known_vector > 0)
   add <- M * (0.5 - sum(z) / M)
   if (add > 0) {
     z[sample(which(z == 0), add)] <- 1 # switch some uncaptured z's to 1.
   }
-  unmarked <- c(rep(FALSE, n.marked), rep(TRUE, M - n.marked))
+  unmarked <- c(rep(FALSE, n_marked), rep(TRUE, M - n_marked))
 
   # Optimize starting locations given where they are trapped.
   s1 <- cbind(runif(M, xlim[1], xlim[2]), runif(M, ylim[1], ylim[2])) # assign random locations
-  y.all2D <- cbind(y.mark2D, y.sight.true)
+  y.all2D <- cbind(y_mark2D, y_sight_true)
   idx <- which(rowSums(y.all2D) > 0) # switch for those actually caught
   for (i in idx) {
     trps <- matrix(Xall[y.all2D[i, ] > 0, 1:2], ncol = 2, byrow = FALSE)
@@ -484,14 +516,14 @@ mcmc.genCatSMR.move <- function(
   if (useverts == TRUE) {
     inside <- rep(NA, nrow(s1))
     for (i in 1:nrow(s1)) {
-      inside[i] <- inout(s1[i, ], vertices)
+      inside[i] <- point_in_area(s1[i, ], vertices)
     }
     idx <- which(inside == FALSE)
     if (length(idx) > 0) {
       for (i in 1:length(idx)) {
         while (inside[idx[i]] == FALSE) {
           s1[idx[i], ] <- c(runif(1, xlim[1], xlim[2]), runif(1, ylim[1], ylim[2]))
-          inside[idx[i]] <- inout(s1[idx[i], ], vertices)
+          inside[idx[i]] <- point_in_area(s1[idx[i], ], vertices)
         }
       }
     }
@@ -503,7 +535,7 @@ mcmc.genCatSMR.move <- function(
 
   # Initialize G.true
   G.true <- matrix(0, nrow = M, ncol = ncat)
-  G.true[1:n.marked, ] <- G.marked
+  G.true[1:n_marked, ] <- G_marked
   for (i in unique(ID)) {
     idx <- which(ID == i)
     if (length(idx) == 1) {
@@ -552,6 +584,7 @@ mcmc.genCatSMR.move <- function(
   if (nburn %% nthin != 0) {
     nstore <- nstore + 1
   }
+
   out <- matrix(NA, nrow = nstore, ncol = 7)
   dimnames(out) <- list(NULL, c("lam0.mark", "lam0.sight", "sigma_d", "sigma_p", "N", "n.um", "psi"))
   if (storeLatent) {
@@ -606,8 +639,10 @@ mcmc.genCatSMR.move <- function(
     K2D1 <- matrix(rep(tf1, M), nrow = M, ncol = J1, byrow = TRUE)
   }
 
-  # Make sure all K2D1 is >= all y.mark2D
-  K2D1[K2D1 < max(y.mark2D)] <- max(y.mark2D)
+  # Make sure all K2D1 is >= all y_mark2D
+  if (!is.null(y_mark)) {
+    K2D1[K2D1 < max(y_mark2D)] <- max(y_mark2D)
+  }
 
   if (!any(is.na(tf2))) {
     if (any(tf2 > K2)) {
@@ -631,40 +666,47 @@ mcmc.genCatSMR.move <- function(
     K2D2 <- matrix(rep(tf2, M), nrow = M, ncol = J2, byrow = TRUE)
   }
 
-  D1 <- AHMbook::e2dist(s1, X1)
-  D2 <- AHMbook::e2dist(s2, X2)
-  lamd.trap <- lam0.mark * exp(-D1 * D1 / (2 * sigma_d * sigma_d))
-  lamd.sight <- lam0.sight * exp(-D2 * D2 / (2 * sigma_d * sigma_d))
-  ll.y.mark <- array(0, dim = c(M, J1))
-  ll.y.sight <- array(0, dim = c(M, J2))
-  if (obstype[1] == "bernoulli") {
-    pd.trap <- 1 - exp(-lamd.trap)
-    pd.trap.cand <- pd.trap
-    ll.y.mark <- dbinom(y.mark2D, K2D1, pd.trap * z, log = TRUE)
-  } else if (obstype[1] == "poisson") {
-    ll.y.mark <- dpois(y.mark2D, K2D1 * lamd.trap * z, log = TRUE)
+  # FROM HERE, SEPARATE MARKED AND SIGHTED WHEN Y_MARK IS NULL, I.E., ONLY DO MARKED PROCESSES WHEN ISN'T NULL
+  # Trap
+  if (!is.null(y_mark)) {
+    D1 <- pairwise_distances(s1, X1)
+    lamd.trap <- lam0.mark * exp(-D1 * D1 / (2 * sigma_d * sigma_d))
+    ll.y_mark <- array(0, dim = c(M, J1))
+    if (obstype[1] == "bernoulli") {
+      pd.trap <- 1 - exp(-lamd.trap)
+      pd.trap.cand <- pd.trap
+      ll.y_mark <- dbinom(y_mark2D, K2D1, pd.trap * z, log = TRUE)
+    } else if (obstype[1] == "poisson") {
+      ll.y_mark <- dpois(y_mark2D, K2D1 * lamd.trap * z, log = TRUE)
+    }
+    lamd.trap.cand <- lamd.trap
+    ll.y_mark.cand <- ll.y_mark
+
+    if (!is.finite(sum(ll.y_mark))) {
+      stop("Trap obs likelihood not finite. Try raising lam0.mark and/or sigma_d inits")
+    }
   }
+
+  # Sight
+  D2 <- pairwise_distances(s2, X2)
+  lamd.sight <- lam0.sight * exp(-D2 * D2 / (2 * sigma_d * sigma_d))
+  ll.y.sight <- array(0, dim = c(M, J2))
   if (obstype[2] == "bernoulli") {
     pd.sight <- 1 - exp(-lamd.sight)
     pd.sight.cand <- pd.sight
-    ll.y.sight <- dbinom(y.sight.true, K2D2, pd.sight * z, log = TRUE)
+    ll.y.sight <- dbinom(y_sight_true, K2D2, pd.sight * z, log = TRUE)
   } else if (obstype[2] == "poisson") {
-    ll.y.sight <- dpois(y.sight.true, K2D2 * lamd.sight * z, log = TRUE)
+    ll.y.sight <- dpois(y_sight_true, K2D2 * lamd.sight * z, log = TRUE)
   }
-
-  lamd.trap.cand <- lamd.trap
   lamd.sight.cand <- lamd.sight
-  ll.y.mark.cand <- ll.y.mark
   ll.y.sight.cand <- ll.y.sight
-  if (!is.finite(sum(ll.y.mark))) {
-    stop("Trap obs likelihood not finite. Try raising lam0.mark and/or sigma_d inits")
-  }
+
   if (!is.finite(sum(ll.y.sight))) {
     stop("Sighting obs likelihood not finite. Try raising lam0.sight and/or sigma_d inits")
   }
 
   # movement likelihood.
-  if (act_center == "move"){
+  if (act_center == "move" & !is.null(y_mark)){
     ll.s2 <- log(dnorm(s2[, 1], s1[, 1], sigma_p) /
                    (pnorm(xlim[2], s1[, 1], sigma_p) - pnorm(xlim[1], s1[, 1], sigma_p)))
     ll.s2 <- ll.s2 + log(dnorm(s2[, 2], s1[, 2], sigma_p) /
@@ -679,20 +721,28 @@ mcmc.genCatSMR.move <- function(
     ###################################
     # Update lam0.mark ----
     ###################################
-    llytrapsum <- sum(ll.y.mark)
-    lam0.mark.cand <- rnorm(1, lam0.mark, proppars$lam0.mark)
-    if (lam0.mark.cand > 0) {
-      if (obstype[1] == "bernoulli") {
+    if (!is.null(y_mark)) {
+      lam0.mark.cand <- rnorm(1, lam0.mark, proppars$lam0.mark)
+      if (lam0.mark.cand > 0) {
         lamd.trap.cand <- lam0.mark.cand * exp(-D1 * D1 / (2 * sigma_d * sigma_d))
-        pd.trap.cand <- 1 - exp(-lamd.trap.cand)
-        ll.y.mark.cand <- dbinom(y.mark2D, K2D1, pd.trap.cand * z, log = TRUE)
-        llytrapcandsum <- sum(ll.y.mark.cand)
-        if (runif(1) < exp(llytrapcandsum - llytrapsum)) {
+        pd.trap.cand <-
+          if (obstype[1] == "bernoulli") 1 - exp(-lamd.trap.cand) else 0
+
+        # update log likelihood for marked individuals
+        ll.y_mark.cand <- calculate_ll_bern_pois(
+          obstype[1],
+          y_mark2D,
+          K2D1,
+          lamd.trap.cand,
+          z
+        )
+
+        if (runif(1) < exp(sum(ll.y_mark.cand) - sum(ll.y_mark))) {
           lam0.mark <- lam0.mark.cand
           lamd.trap <- lamd.trap.cand
           pd.trap <- pd.trap.cand
-          ll.y.mark <- ll.y.mark.cand
-          llytrapsum <- llytrapcandsum
+          ll.y_mark <- ll.y_mark.cand
+          llytrapsum <- sum(ll.y_mark.cand)
           accept_rates <- accept_rates %>%
             dplyr::mutate(
               accept = dplyr::case_when(
@@ -701,72 +751,44 @@ mcmc.genCatSMR.move <- function(
               )
             )
         }
-      } else { # poisson
-        llytrapsum <- sum(ll.y.mark)
-        lam0.mark.cand <- rnorm(1, lam0.mark, proppars$lam0.mark)
-        if (lam0.mark.cand > 0) {
-          lamd.trap.cand <- lam0.mark.cand * exp(-D1 * D1 / (2 * sigma_d * sigma_d))
-          ll.y.mark.cand <- dpois(y.mark2D, K2D1 * lamd.trap.cand * z, log = TRUE)
-          llytrapcandsum <- sum(ll.y.mark.cand)
-          if (runif(1) < exp(llytrapcandsum - llytrapsum)) {
-            lam0.mark <- lam0.mark.cand
-            lamd.trap <- lamd.trap.cand
-            ll.y.mark <- ll.y.mark.cand
-            llytrapsum <- llytrapcandsum
-            # accept_rates <- accept_rates %>%
-            #   dplyr::add_row(acc_iter = iter, label = "lam0.mark", accept = 1)
-            accept_rates <- accept_rates %>%
-              dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                        label == "lam0.mark" ~
-                                                        1,
-                                                      .default = accept))
-          }
-        }
       }
+    } else {
+      lam0.mark <- 0
+      lamd.trap <- 0
+      ll.y_mark <- 0
+      llytrapsum <- 0
     }
 
     ###################################
     # Update lam0.sight ----
     ###################################
-    llysightsum <- sum(ll.y.sight)
     lam0.sight.cand <- rnorm(1, lam0.sight, proppars$lam0.sight)
     if (lam0.sight.cand > 0) {
-      if (obstype[2] == "bernoulli") {
-        lamd.sight.cand <- lam0.sight.cand * exp(-D2 * D2 / (2 * sigma_d * sigma_d))
-        pd.sight.cand <- 1 - exp(-lamd.sight.cand)
-        ll.y.sight.cand <- dbinom(y.sight.true, K2D2, pd.sight.cand * z, log = TRUE)
-        llysightcandsum <- sum(ll.y.sight.cand)
-        if (runif(1) < exp(llysightcandsum - llysightsum)) {
-          lam0.sight <- lam0.sight.cand
-          lamd.sight <- lamd.sight.cand
-          pd.sight <- pd.sight.cand
-          ll.y.sight <- ll.y.sight.cand
-          llysightsum <- llysightcandsum
-          accept_rates <- accept_rates %>%
-            dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                      label == "lam0.sight" ~
-                                                      1,
-                                                    .default = accept))
-        }
-      } else { # poisson
-        llysightsum <- sum(ll.y.sight)
-        lam0.sight.cand <- rnorm(1, lam0.sight, proppars$lam0.sight)
-        if (lam0.sight.cand > 0) {
-          lamd.sight.cand <- lam0.sight.cand * exp(-D2 * D2 / (2 * sigma_d * sigma_d))
-          ll.y.sight.cand <- dpois(y.sight.true, K2D2 * lamd.sight.cand * z, log = TRUE)
-          llysightcandsum <- sum(ll.y.sight.cand)
-          if (runif(1) < exp(llysightcandsum - llysightsum)) {
-            lam0.sight <- lam0.sight.cand
-            lamd.sight <- lamd.sight.cand
-            ll.y.sight <- ll.y.sight.cand
-            llysightsum <- llysightcandsum
-            accept_rates <- accept_rates %>%
-              dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                        label == "lam0.sight" ~
-                                                        1,
-                                                      .default = accept))
-          }
-        }
+      lamd.sight.cand <- lam0.sight.cand * exp(-D2 * D2 / (2 * sigma_d * sigma_d))
+
+      pd.sight.cand <-
+        if (obstype[2] == "bernoulli") 1 - exp(-lamd.sight.cand) else 0
+
+      # update log likelihood for marked individuals
+      ll.y.sight.cand <- calculate_ll_bern_pois(
+        obstype[2],
+        y_sight_true,
+        K2D2,
+        lamd.sight.cand,
+        z
+      )
+
+      if (runif(1) < exp(sum(ll.y.sight.cand) - sum(ll.y.sight))) {
+        lam0.sight <- lam0.sight.cand
+        lamd.sight <- lamd.sight.cand
+        pd.sight <- pd.sight.cand
+        ll.y.sight <- ll.y.sight.cand
+        llysightsum <- sum(ll.y.sight.cand)
+        accept_rates <- accept_rates %>%
+          dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
+                                                    label == "lam0.sight" ~
+                                                    1,
+                                                  .default = accept))
       }
     }
 
@@ -775,25 +797,24 @@ mcmc.genCatSMR.move <- function(
     ###################################
     sigma_d.cand <- rnorm(1, sigma_d, proppars$sigma_d)
     if (sigma_d.cand > 0) {
-      if (obstype[1] == "bernoulli") {
+      if (!is.null(y_mark)) {
+        # log likelihood for marked
         lamd.trap.cand <- lam0.mark * exp(-D1 * D1 / (2 * sigma_d.cand * sigma_d.cand))
-        pd.trap.cand <- 1 - exp(-lamd.trap.cand)
-        ll.y.mark.cand <- dbinom(y.mark2D, K2D1, pd.trap.cand * z, log = TRUE)
+        ll.y_mark.cand <-
+          calculate_ll_bern_pois(obstype[1], y_mark2D, K2D1, lamd.trap.cand, z)
+        llytrapcandsum <- sum(ll.y_mark.cand)
       } else {
-        lamd.trap.cand <- lam0.mark * exp(-D1 * D1 / (2 * sigma_d.cand * sigma_d.cand))
-        ll.y.mark.cand <- dpois(y.mark2D, K2D1 * lamd.trap.cand * z, log = TRUE)
-        llytrapcandsum <- sum(ll.y.mark.cand)
+        lamd.trap.cand <- 0
+        ll.y_mark.cand <- 0
+        llytrapcandsum <- 0
       }
-      llytrapcandsum <- sum(ll.y.mark.cand)
-      if (obstype[2] == "bernoulli") {
-        lamd.sight.cand <- lam0.sight * exp(-D2 * D2 / (2 * sigma_d.cand * sigma_d.cand))
-        pd.sight.cand <- 1 - exp(-lamd.sight.cand)
-        ll.y.sight.cand <- dbinom(y.sight.true, K2D2, pd.sight.cand * z, log = TRUE)
-      } else {
-        lamd.sight.cand <- lam0.sight * exp(-D2 * D2 / (2 * sigma_d.cand * sigma_d.cand))
-        ll.y.sight.cand <- dpois(y.sight.true, K2D2 * lamd.sight.cand * z, log = TRUE)
-      }
+
+      # log likelihood for sighted
+      lamd.sight.cand <- lam0.sight * exp(-D2 * D2 / (2 * sigma_d.cand * sigma_d.cand))
+      ll.y.sight.cand <-
+        calculate_ll_bern_pois(obstype[2], y_sight_true, K2D2, lamd.sight.cand, z)
       llysightcandsum <- sum(ll.y.sight.cand)
+
       if (uselocs) {
         for (i in telguys) {
           ll.tel.cand[i, ] <- dnorm(locs[i, , 1], s2[i, 1], sigma_d.cand, log = TRUE) +
@@ -802,12 +823,20 @@ mcmc.genCatSMR.move <- function(
       } else {
         ll.tel.cand <- ll.tel <- 0
       }
+
+      # if (usePriors) {
+      #   prior.curr <- dgamma(sigma, priors$sigma[1], priors$sigma[2], log = TRUE)
+      #   prior.cand <- dgamma(sigma.cand, priors$sigma[1], priors$sigma[2], log = TRUE)
+      # } else {
+      #   prior.curr <- prior.cand <- 0
+      # }
+
       if (runif(1) < exp((llytrapcandsum + llysightcandsum + sum(ll.tel.cand, na.rm = TRUE)) -
-                         (llytrapsum + llysightsum + sum(ll.tel, na.rm = TRUE)))) {
+                         (llytrapsum + llysightsum + sum(ll.tel, na.rm = TRUE)))) { # + prior.curr
         sigma_d <- sigma_d.cand
         lamd.trap <- lamd.trap.cand
         lamd.sight <- lamd.sight.cand
-        ll.y.mark <- ll.y.mark.cand
+        ll.y_mark <- ll.y_mark.cand
         ll.y.sight <- ll.y.sight.cand
         ll.tel <- ll.tel.cand
         accept_rates <- accept_rates %>%
@@ -828,7 +857,7 @@ mcmc.genCatSMR.move <- function(
     # ID update
     ###################################
     if (IDup == "Gibbs") {
-      # Update y.sight.true from full conditional canceling out inconsistent combos with constraints.
+      # Update y_sight_true from full conditional canceling out inconsistent combos with constraints.
       up <- sample(1:n.samp.latent, nswap, replace = FALSE)
       for (l in up) {
         nj <- which(y.sight.latent[l, ] > 0)
@@ -847,18 +876,18 @@ mcmc.genCatSMR.move <- function(
           if (any(data$markedS == 0 | data$markedS == 2)) {
             possible <- possible[which(Kconstraints[possible, l] == 0)] # k marked status constraints
           } else {
-            possible <- possible[possible > n.marked] # Can't swap to a marked guy
+            possible <- possible[possible > n_marked] # Can't swap to a marked guy
           }
         } else {
           if (Mark.obs[l] == 2) { # This is an unmarked sample
             if (any(data$markedS == 0 | data$markedS == 2)) {
               possible <- possible[which(Kconstraints[possible, l] == 0)] # k marked status constraints
             } else {
-              possible <- possible[possible > n.marked] # Can't swap to a marked guy
+              possible <- possible[possible > n_marked] # Can't swap to a marked guy
             }
           }
           if (Mark.obs[l] == 1) { # This is a marked sample
-            possible <- possible[possible <= n.marked] # Can't swap to an unmarked guy
+            possible <- possible[possible <= n_marked] # Can't swap to an unmarked guy
             if (any(data$markedS == 0 | data$markedS == 2)) {
               possible <- possible[which(Kconstraints[possible, l] == 1)] # k marked status constraints
             }
@@ -872,19 +901,19 @@ mcmc.genCatSMR.move <- function(
         if (ID[l] != newID) {
           swapped <- c(ID[l], newID)
           # update y.true
-          y.sight.true[ID[l], ] <- y.sight.true[ID[l], ] - y.sight.latent[l, ]
-          y.sight.true[newID, ] <- y.sight.true[newID, ] + y.sight.latent[l, ]
+          y_sight_true[ID[l], ] <- y_sight_true[ID[l], ] - y.sight.latent[l, ]
+          y_sight_true[newID, ] <- y_sight_true[newID, ] + y.sight.latent[l, ]
           ID[l] <- newID
           if (obstype[2] == "bernoulli") {
-            ll.y.sight[swapped, ] <- dbinom(y.sight.true[swapped, ], K2D2[swapped, ], pd.sight[swapped, ], log = TRUE)
+            ll.y.sight[swapped, ] <- dbinom(y_sight_true[swapped, ], K2D2[swapped, ], pd.sight[swapped, ], log = TRUE)
           } else {
-            ll.y.sight[swapped, ] <- dpois(y.sight.true[swapped, ], K2D2[swapped, ] * lamd.sight[swapped, ], log = TRUE)
+            ll.y.sight[swapped, ] <- dpois(y_sight_true[swapped, ], K2D2[swapped, ] * lamd.sight[swapped, ], log = TRUE)
           }
         }
       }
     } else {
       up <- sample(1:n.samp.latent, nswap, replace = FALSE)
-      y.sight.cand <- y.sight.true
+      y.sight.cand <- y_sight_true
       for (l in up) {
         nj <- which(y.sight.latent[l, ] > 0)
         # Can only swap if IDcovs match
@@ -902,18 +931,18 @@ mcmc.genCatSMR.move <- function(
           if (any(data$markedS == 0 | data$markedS == 2)) {
             possible <- possible[which(Kconstraints[possible, l] == 0)] # k marked status constraints
           } else {
-            possible <- possible[possible > n.marked] # Can't swap to a marked guy
+            possible <- possible[possible > n_marked] # Can't swap to a marked guy
           }
         } else {
           if (Mark.obs[l] == 2) { # This is an unmarked sample
             if (any(data$markedS == 0 | data$markedS == 2)) {
               possible <- possible[which(Kconstraints[possible, l] == 0)] # k marked status constraints
             } else {
-              possible <- possible[possible > n.marked] # Can't swap to a marked guy
+              possible <- possible[possible > n_marked] # Can't swap to a marked guy
             }
           }
           if (Mark.obs[l] == 1) { # This is a marked sample
-            possible <- possible[possible <= n.marked] # Can't swap to an unmarked guy
+            possible <- possible[possible <= n_marked] # Can't swap to an unmarked guy
             if (any(data$markedS == 0 | data$markedS == 2)) {
               possible <- possible[which(Kconstraints[possible, l] == 1)] # k marked status constraints
             }
@@ -945,9 +974,9 @@ mcmc.genCatSMR.move <- function(
         # focalprob=1/n.samp.latent
         # focalbackprob=1/length(possible)
         # update y.true
-        y.sight.cand[ID[l], ] <- y.sight.true[ID[l], ] - y.sight.latent[l, ]
-        y.sight.cand[newID[l], ] <- y.sight.true[newID[l], ] + y.sight.latent[l, ]
-        focalprob <- (sum(ID == ID[l]) / n.samp.latent) * (y.sight.true[ID[l], nj] / sum(y.sight.true[ID[l], ]))
+        y.sight.cand[ID[l], ] <- y_sight_true[ID[l], ] - y.sight.latent[l, ]
+        y.sight.cand[newID[l], ] <- y_sight_true[newID[l], ] + y.sight.latent[l, ]
+        focalprob <- (sum(ID == ID[l]) / n.samp.latent) * (y_sight_true[ID[l], nj] / sum(y_sight_true[ID[l], ]))
         focalbackprob <- (sum(newID == newID[l]) / n.samp.latent) * (y.sight.cand[newID[l], nj] / sum(y.sight.cand[newID[l], ]))
         ## update ll.y
         if (obstype[2] == "poisson") {
@@ -965,7 +994,7 @@ mcmc.genCatSMR.move <- function(
         }
         if (runif(1) < exp(sum(ll.y.sight.cand[swapped, ]) - sum(ll.y.sight[swapped, ])) *
             (backprob / propprob) * (focalbackprob / focalprob)) {
-          y.sight.true[swapped, ] <- y.sight.cand[swapped, ]
+          y_sight_true[swapped, ] <- y.sight.cand[swapped, ]
           ll.y.sight[swapped, ] <- ll.y.sight.cand[swapped, ]
           ID[l] <- newID[l]
         }
@@ -973,12 +1002,12 @@ mcmc.genCatSMR.move <- function(
     }
 
     ###################################
-    # update known.vector and G.latent
+    # update known_vector and G.latent
     ###################################
-    known.vector[(n.marked + 1):M] <- 1 * (rowSums(y.sight.true[(n.marked + 1):M, ]) > 0)
+    known_vector[(n_marked + 1):M] <- 1 * (rowSums(y_sight_true[(n_marked + 1):M, ]) > 0)
     G.true.tmp <- matrix(0, nrow = M, ncol = ncat)
-    G.true.tmp[1:n.marked, ] <- 1
-    for (i in unique(ID[ID > n.marked])) {
+    G.true.tmp[1:n_marked, ] <- 1
+    for (i in unique(ID[ID > n_marked])) {
       idx2 <- which(ID == i)
       if (length(idx2) == 1) {
         G.true.tmp[i, ] <- G.use[idx2, ]
@@ -1023,16 +1052,16 @@ mcmc.genCatSMR.move <- function(
 
 
     fc <- prob0 * psi / (prob0 * psi + 1 - psi)
-    z[known.vector == 0] <- rbinom(sum(known.vector == 0), 1, fc[known.vector == 0])
+    z[known_vector == 0] <- rbinom(sum(known_vector == 0), 1, fc[known_vector == 0])
     if (obstype[1] == "bernoulli") {
-      ll.y.mark <- dbinom(y.mark2D, K2D1, pd.trap * z, log = TRUE)
+      ll.y_mark <- dbinom(y_mark2D, K2D1, pd.trap * z, log = TRUE)
     } else {
-      ll.y.mark <- dpois(y.mark2D, K2D1 * lamd.trap * z, log = TRUE)
+      ll.y_mark <- dpois(y_mark2D, K2D1 * lamd.trap * z, log = TRUE)
     }
     if (obstype[2] == "bernoulli") {
-      ll.y.sight <- dbinom(y.sight.true, K2D2, pd.sight * z, log = TRUE)
+      ll.y.sight <- dbinom(y_sight_true, K2D2, pd.sight * z, log = TRUE)
     } else {
-      ll.y.sight <- dpois(y.sight.true, K2D2 * lamd.sight * z, log = TRUE)
+      ll.y.sight <- dpois(y_sight_true, K2D2 * lamd.sight * z, log = TRUE)
     }
     psi <- rbeta(1, 1 + sum(z), 1 + M - sum(z))
 
@@ -1057,22 +1086,25 @@ mcmc.genCatSMR.move <- function(
             calculate_log_likelihood(s2[i, 1], Scand[1], xlim, sigma_p) +
             calculate_log_likelihood(s2[i, 2], Scand[2], ylim, sigma_p)
 
+          pd.trap.cand[i, ] <-
+            if (obstype[1] == "bernoulli") 1 - exp(-lamd.trap.cand[i, ]) else 0
+
           # update log likelihood for marked individuals
-          ll.y.mark.cand <- calculate_ll_bern_pois(
+          ll.y_mark.cand <- calculate_ll_bern_pois(
             obstype[1],
-            y.mark2D[i, ],
+            y_mark2D[i, ],
             K2D1[i, ],
             lamd.trap.cand[i, ],
             z[i]
             )
 
-          if (runif(1) < exp((sum(ll.y.mark.cand[i, ]) + ll.s2.cand[i]) -
-                             (sum(ll.y.mark[i, ]) + ll.s2[i]))) {
+          if (runif(1) < exp((sum(ll.y_mark.cand[i, ]) + ll.s2.cand[i]) -
+                             (sum(ll.y_mark[i, ]) + ll.s2[i]))) {
             s1[i, ] <- Scand
             D1[i, ] <- d1tmp
             lamd.trap[i, ] <- lamd.trap.cand[i, ]
             pd.trap[i, ] <- pd.trap.cand[i, ]
-            ll.y.mark[i, ] <- ll.y.mark.cand[i, ]
+            ll.y_mark[i, ] <- ll.y_mark.cand[i, ]
             ll.s2[i] <- ll.s2.cand[i]
             s_1_accept <- s_1_accept + 1
           }
@@ -1101,7 +1133,7 @@ mcmc.genCatSMR.move <- function(
 
           ll.y.sight.cand <- calculate_ll_bern_pois(
             obstype[2],
-            y.sight.true[i, ],
+            y_sight_true[i, ],
             K2D2[i, ],
             lamd.sight.cand[i, ],
             z[i]
@@ -1154,9 +1186,9 @@ mcmc.genCatSMR.move <- function(
           lamd.trap.cand[i, ] <- lam0.mark *
             exp(-d1tmp * d1tmp / (2 * sigma_d * sigma_d))
 
-          ll.y.mark.cand <- calculate_ll_bern_pois(
+          ll.y_mark.cand <- calculate_ll_bern_pois(
             obstype[1],
-            y.mark2D[i, ],
+            y_mark2D[i, ],
             K2D1[i, ],
             lamd.trap.cand[i, ],
             z[i]
@@ -1169,7 +1201,7 @@ mcmc.genCatSMR.move <- function(
 
           ll.y.sight.cand <- calculate_ll_bern_pois(
             obstype[2],
-            y.sight.true[i, ],
+            y_sight_true[i, ],
             K2D2[i, ],
             lamd.sight.cand[i, ],
             z[i]
@@ -1184,10 +1216,10 @@ mcmc.genCatSMR.move <- function(
             ll.tel.cand[i, ] <- 0
           }
 
-          if (runif(1) < exp((sum(ll.y.mark.cand[i, ]) +
+          if (runif(1) < exp((sum(ll.y_mark.cand[i, ]) +
                               sum(ll.y.sight.cand[i, ]) +
                               sum(ll.tel.cand[i, ], na.rm = TRUE)) -
-                             (sum(ll.y.mark[i, ]) +
+                             (sum(ll.y_mark[i, ]) +
                               sum(ll.y.sight[i, ]) +
                               sum(ll.tel[i, ], na.rm = TRUE)))
           ) {
@@ -1197,7 +1229,7 @@ mcmc.genCatSMR.move <- function(
             D2[i, ] <- d2tmp
             lamd.trap[i, ] <- lamd.trap.cand[i, ]
             lamd.sight[i, ] <- lamd.sight.cand[i, ]
-            ll.y.mark[i, ] <- ll.y.mark.cand[i, ]
+            ll.y_mark[i, ] <- ll.y_mark.cand[i, ]
             ll.y.sight[i, ] <- ll.y.sight.cand[i, ]
             ll.tel[i, ] <- ll.tel.cand[i, ]
             ll.s2[i] <- ll.s2.cand[i]
@@ -1265,7 +1297,7 @@ mcmc.genCatSMR.move <- function(
         }
       }
       if (useUnk | useMarkednoID) {
-        n <- length(unique(ID[ID > n.marked]))
+        n <- length(unique(ID[ID > n_marked]))
       } else {
         n <- length(unique(ID))
       }
