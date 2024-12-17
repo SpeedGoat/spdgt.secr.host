@@ -64,11 +64,6 @@ point_in_area <- function(point,
     return(in_poly(point, vertices))
   }
 }
-if (useverts == FALSE) {
-  inbox <- Scand[1] < xlim[2] & Scand[1] > xlim[1] & Scand[2] < ylim[2] & Scand[2] > ylim[1]
-} else {
-  inbox <- in_poly(Scand, vertices)
-}
 
 #' Determine if a Point is Inside a Polygon
 #'
