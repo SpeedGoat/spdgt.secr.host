@@ -9,8 +9,7 @@ SMR_wrapper <- function(data, input) {
               Using non-mobile model.")
     }
 
-    model_choices <- model_choices %>%
-      dplyr::filter(!(ID %in% c(1, 3)))
+    model_choices <- model_choices[!(model_choices %in% c(1, 3))]
   }
 
   # Validate inputs
