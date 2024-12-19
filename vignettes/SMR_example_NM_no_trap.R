@@ -3,12 +3,8 @@
 # Marked ("tagged") and unmarked ("unmarked") individuals are captured at cameras at camera locations, X.in. Capture histories are recorded in cams.in with number captured (n.det), sex, marked (also tag.class), and gps (unused). Effort is extrapolated from the number of unique dates in cams.in
 
 # No snares were used for this run. Conventional SMR is used (no trap markings)
-# devtools::load_all()
-# library(readr)
 library(dplyr)
-# library(AHMbook)
 library(doParallel)
-# library(spdgt.sim)
 
 # Download Google Drive files to temp folder
 file_names <- tibble::tibble(
@@ -68,25 +64,6 @@ locs.in <- readr::read_csv(tmpfl[3], show_col_types = FALSE) |>
     y = as.numeric(y)
   ) |>
   dplyr::rename(tag.id = tag_id)
-
-# # Plot cameras and gps locations
-# plot_cams_gps(X.in, locs.in)
-# plot_cam_counts(cams.in, X.in)
-
-# Summarise camera captures
-# cams.in |>
-#   group_by(tag) |>
-#   summarise(num_counts = sum(n.det),
-#             marked = marked)
-
-# # Remove outlier tags (might change to NA instead)
-# `%notin%` <- Negate(`%in%`)
-# cams.in <- cams.in |>
-#   dplyr::filter(tag %notin% c("GrayHead", "NoTail", "RingNeck"))
-
-# # Remove tagged dead animals (check to make sure this is correct)
-# cams.in <- cams.in |>
-#   dplyr::filter(alive == 1)
 
 # Redefine IDs to be sequential
 X.in <- X.in |>
@@ -194,15 +171,7 @@ for (i in 1:ncat) {
 IDlist <- list(ncat = ncat, IDcovs = IDcovs)
 
 # Trap operation vector or matrix for the sighting process
-# # Exposure to capture does not vary by indiviudal or by trap and individual
 tf <- rep(K, J)
-# Exposure to capture varies by individual or by trap and individual
-# make individual x trap effort to account for dead individual
-# tf2 <- matrix(K, ncol = J, nrow = n.marked)
-#
-# tf2 <- rbind(tf2, matrix(K,
-#                          ncol = J,
-#                          nrow = M - n.marked))
 
 data <- vector("list")
 data$n_marked <- n.marked
@@ -215,7 +184,6 @@ data$locs <- locs
 data$X2 <- as.matrix(X)
 data$K2 <- K
 data$buff <- buff
-# data$tf1 <- tf
 data$tf2 <- tf
 xlim <- c(min(X$x), max(X$x)) + c(-buff, buff)
 ylim <- c(min(X$y), max(X$y)) + c(-buff, buff)
@@ -236,7 +204,8 @@ input <- list(
                        sigma_p = 100, s1 = 100, s2 = 100, s2t = 100),
   min_proppars <- list(lam0_mark = .001, lam0_sight = .001, sigma_d = .001,
                        sigma_p = .001, s1 = .001, s2 = .001, s2t = .001),
-  storeLatent = TRUE, storeGamma = TRUE, IDup = "Gibbs"
+  storeLatent = TRUE, storeGamma = TRUE, IDup = "Gibbs",
+  model_choices = list(1:4)
 )
 
 # # Use vertices instead of buffer
@@ -245,64 +214,16 @@ input <- list(
 # area = 60*120+55*100+35*25 # area of vertexed shape
 
 # Run models in parallel
-# n_cores <- parallel::detectCores() # Check number of cores available
-my_cluster <- makeCluster(6, type = "PSOCK")
-#register cluster to be used by %dopar%
-doParallel::registerDoParallel(cl = my_cluster)
+final_out <- SMR_wrapper(data, input)
 
-system.time({
-  all_out <- foreach::foreach(
-    ii = 1:2,
-    .packages = c("dplyr")
-  ) %dopar% {
-
-    devtools::load_all()
-
-    if (ii == 1) {
-      ## sex and telemetry
-      out_1 <- mcmc_SMR(data, input)
-
-      # MCMC_SPIM_out_1 <- coda::as.mcmc(do.call(cbind, list(out_1$out)))
-      # summary(MCMC_SPIM_out_1)
-
-      all_out <- tibble::as_tibble(out_1$out) %>%
-        dplyr::mutate(model = as.character(ii))
-    }
-
-    ##########################################
-    if (ii == 2) {
-      ## sex and no telemetry
-      data_no_tele <- data
-      data_no_tele$locs <- NA
-
-      out_2 <- mcmc_SMR(data_no_tele, input)
-      # MCMC_SPIM_out_2 <- coda::as.mcmc(do.call(cbind, list(out_2$out)))
-      # summary(MCMC_SPIM_out_2)
-
-      all_out <- tibble::as_tibble(out_2$out) %>%
-        dplyr::mutate(model = as.character(ii))
-
-    }
-  }
-  all_out <- all_out
-}) # Time stop
-# Stop cluster
-stopCluster(my_cluster)
-
-all_out <- dplyr::bind_rows(all_out) %>%
-  tidyr::pivot_longer(cols = -model, names_to = "Parameter", values_to = "Mean")
-
-# sigma_d == sigma
-# all_out$parm[all_out$parm == "sigma_d"] <- "sigma"
-
-all_out %>%
+final_out %>%
   dplyr::filter(Parameter == "N") %>%
   ggplot2::ggplot(ggplot2::aes(x = model, y = Mean, fill = model, group = model)) +
   ggplot2::geom_boxplot() +
   ggplot2::labs(y = "Abundance Estimates", "Model") +
   ggplot2::theme_minimal()
 
-all_out %>%
+final_out %>%
   dplyr::filter(Parameter == "N") %>%
   dplyr::mutate(Mean = Mean * 100 / area) %>%
   ggplot2::ggplot(ggplot2::aes(x = model, y = Mean, fill = model, group = model)) +
@@ -310,14 +231,14 @@ all_out %>%
   ggplot2::labs(y = "Density Estimates", "Model") +
   ggplot2::theme_minimal()
 
-all_out %>%
+final_out %>%
   dplyr::filter(Parameter %in% c("lam0_mark", "lam0_sight")) %>%
   ggplot2::ggplot(ggplot2::aes(x = Parameter, y = Mean, fill = model)) +
   ggplot2::geom_boxplot(position = ggplot2::position_dodge(width = 1)) +
   ggplot2::labs(y = "Mean Parameter Outputs", x = "Parameter") +
   ggplot2::theme_minimal()
 
-all_out %>%
+final_out %>%
   dplyr::filter(Parameter %in% c("sigma_d", "sigma_p")) %>%
   ggplot2::ggplot(ggplot2::aes(x = Parameter, y = Mean, fill = model)) +
   ggplot2::geom_boxplot(position = ggplot2::position_dodge(width = 1)) +

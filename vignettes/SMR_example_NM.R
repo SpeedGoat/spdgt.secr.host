@@ -2,14 +2,9 @@
 # Marked individuals are captured with snares and may be used with telemetry data. Relevant data parms are X1.in (snare locations), snares.in (individual tags and tag ids, capture history for each snare). Effort is recorded in effort.in
 # Marked ("tagged") and unmarked ("unmarked") individuals are captured at cameras at camera locations, X2.in. Capture histories are recorded in cams.in with number captured (n.det), sex, marked (also tag.class), and gps (unused). Effort is extrapolated from the number of unique dates in cams.in
 
-devtools::load_all()
-
 # We can probably reorganize this...
-library(readr)
-library(tidyverse)
-# library(AHMbook)
+library(dplyr)
 library(doParallel)
-library(spdgt.sim)
 
 # Download Google Drive files to temp folder
 file_names <- c("capture_xy_all.csv",
@@ -35,27 +30,15 @@ for (ff in 1:length(file_names)) {
     )
 }
 
-# Store all relevant outputs
-all_out <- tibble(
-  model = character(),
-  parm = character(),
-  means = double(),
-  sds = double()
-)
-
-reps <- 1:3 # run 3 models
-
-# Initializations
-
 # MCMC Initializations
 storeLatent <- TRUE
 storeGamma <- TRUE
-niter <- 30000
-nburn <- 20000
-nthin <- 1
-# niter <- 5000
-# nburn <- 1000
+# niter <- 50000
+# nburn <- 40000
 # nthin <- 1
+niter <- 5000
+nburn <- 1000
+nthin <- 1
 
 # Collect data if on Google Drive
 # Trap locations for marking (X1; snares) and sighting (X2; cameras) processes (required: x, y)
@@ -152,9 +135,6 @@ G.unmarked[is.na(G.unmarked)] <- 0
 # Location matrix for telemetry data
 locs <- array(NA, dim = c(n.marked, K2, 2))
 
-# # Remove captures for ind 14 since not captured in snares
-# locs.in <- filter(locs.in, tag_id != 14)
-
 locs.indices <- cbind(locs.in$tag_id, # tag_id uses underscore in this dataset...
                       locs.in$week.id)
 locs[cbind(locs.indices, 1)] <- as.numeric(locs.in$x) / x.scale
@@ -172,31 +152,10 @@ for (i in 1:ncat) {
 IDlist <- list(ncat = ncat, IDcovs = IDcovs)
 
 # Trap operation vector or matrix for the marking process
-# Exposure to capture does not vary by indiviudal or by trap and individual
-# tf1 <- NA
 tf1 <- effort.in$days
-# # Exposure to capture varies by individual or by trap and individual
-# tf1 <- matrix(rep(effort.in$days, n.marked),
-#               ncol = J1,
-#               nrow = n.marked,
-#               byrow = TRUE)
-# # Append augmented data
-# tf1 <- rbind(tf1, matrix(rep(tf1[1, ], M - n.marked),
-#                          nrow = M - n.marked,
-#                          ncol = J1,
-#                          byrow = TRUE))
 
 # Trap operation vector or matrix for the sighting process
-# # Exposure to capture does not vary by indiviudal or by trap and individual
-# tf2 <- NA
 tf2 <- rep(K2, J2)
-# Exposure to capture varies by individual or by trap and individual
-# make individual x trap effort to account for dead individual
-# tf2 <- matrix(K2, ncol = J2, nrow = n.marked)
-#
-# tf2 <- rbind(tf2, matrix(K2,
-#                          ncol = J2,
-#                          nrow = M - n.marked))
 
 # Make mark order matrix
 markedS <- matrix(1, ncol = K2, nrow = n.marked) # Assume all individuals are marked for all occasions
@@ -229,7 +188,7 @@ mean_N <- c()
 SD_N <- c()
 
 input <- list(
-  niter = 2400, nburn = 1200, nthin = 5, M = 200, act_center = "no move",
+  niter = niter, nburn = nburn, nthin = nthin, M = M, act_center = "no move",
   inits = list(lam0_mark = 0.05, lam0_sight = 0.009, sigma_d = 5,
                sigma_p = 5, s1 = 5, s2 = 5, psi = 0.5,
                gamma = vector("list", 1)),
@@ -240,7 +199,8 @@ input <- list(
                        sigma_p = 100, s1 = 100, s2 = 100, s2t = 100),
   min_proppars <- list(lam0_mark = .001, lam0_sight = .001, sigma_d = .001,
                        sigma_p = .001, s1 = .001, s2 = .001, s2t = .001),
-  storeLatent = TRUE, storeGamma = TRUE, IDup = "Gibbs"
+  storeLatent = TRUE, storeGamma = TRUE, IDup = "Gibbs",
+  model_choices = list(1:4)
 )
 
 # # Use vertices instead of buffer
@@ -249,113 +209,33 @@ input <- list(
 # area = 60*120+55*100+35*25 # area of vertexed shape
 
 # Run models in parallel
-# n_cores <- parallel::detectCores() # Check number of cores available
-my_cluster <- makeCluster(6, type = "PSOCK")
-#register cluster to be used by %dopar%
-doParallel::registerDoParallel(cl = my_cluster)
+final_out <- SMR_wrapper(data, input)
 
-system.time({
-  all_out_i <- foreach::foreach(
-    iter=1:3,
-    .packages = "magrittr"
-  ) %dopar% {
-
-    devtools::load_all()
-
-    # for (iter in reps) {
-    if (iter == 1) {
-      input$act_center <- "no move"
-
-      out_1 <- mcmc_SMR(data, input)
-      # MCMC_SPIM_out_1 <- coda::as.mcmc(do.call(cbind, list(out_1$out)))
-      # summary(MCMC_SPIM_out_1)
-
-      all_out_i <- tibble::as_tibble(out_1$out) %>%
-        dplyr::mutate(model = as.character(iter))
-    }
-
-    ##########################################
-    if (iter == 2) {
-      input$act_center <- "move"
-
-      out_2 <- mcmc_SMR(data, input)
-      # MCMC_SPIM_out_2 <- coda::as.mcmc(do.call(cbind, list(out_2$out)))
-      # summary(MCMC_SPIM_out_2)
-
-      all_out_i <- tibble::as_tibble(out_2$out) %>%
-        dplyr::mutate(model = as.character(iter))
-    }
-    ####################################
-    if (iter == 3) {
-      # sex and no telemetry mobile
-      data_no_tele <- data
-      data_no_tele$locs <- NA
-
-      input$act_center <- "move"
-
-      out_3 <- mcmc_SMR(data_no_tele, input)
-      # MCMC_SPIM_out_3 <- coda::as.mcmc(do.call(cbind, list(out_3$out)))
-      # summary(MCMC_SPIM_out_3)
-
-      all_out_i <- tibble::as_tibble(out_3$out) %>%
-        dplyr::mutate(model = as.character(iter))
-    }
-    all_out_i <- all_out_i
-  }
-}) # Time stop
-# Stop cluster
-stopCluster(my_cluster)
-
-# Is there a better way to select each element in the list?
-all_out <- tibble::tibble()
-for (ii in 1:3) {
-  all_out <- all_out %>%
-    dplyr::bind_rows(
-      all_out_i[[ii]] %>%
-        dplyr::mutate(model = as.character(ii))
-    )
-    # dplyr::add_row(model = as.character(ii),
-    #                parm = colnames(all_out_i[[ii]]),
-    #                means = colMeans(all_out_i[[ii]]),
-    #                sds = apply(all_out_i[[ii]], 2, sd)
-    # )
-}
-
-# all_out_unlist <- all_out_i[[2]]
-# plot(all_out_unlist$sigma_p)
-
-all_out <- dplyr::bind_rows(all_out_i) %>%
-  tidyr::pivot_longer(cols = -model, names_to = "Parameter", values_to = "Mean")
-
-# sigma_d == sigma
-# all_out$parm[all_out$parm == "sigma_d"] <- "sigma"
-
-all_out %>%
+final_out %>%
   dplyr::filter(Parameter == "N") %>%
   ggplot2::ggplot(ggplot2::aes(x = model, y = Mean, fill = model, group = model)) +
   ggplot2::geom_boxplot() +
   ggplot2::labs(y = "Abundance Estimates", "Model") +
   ggplot2::theme_minimal()
 
-all_out %>%
-  dplyr::filter(Parameter == "N") %>%
-  dplyr::mutate(Mean = Mean * 100 / area) %>%
+final_out %>%
+  dplyr::filter(Parameter == "D") %>%
   ggplot2::ggplot(ggplot2::aes(x = model, y = Mean, fill = model, group = model)) +
   ggplot2::geom_boxplot() +
-  labs(y = "Density Estimates", "Model") +
-  theme_minimal()
+  ggplot2::labs(y = "Density Estimates", "Model") +
+  ggplot2::theme_minimal()
 
-all_out %>%
+final_out %>%
   dplyr::filter(Parameter %in% c("lam0_mark", "lam0_sight")) %>%
   ggplot2::ggplot(ggplot2::aes(x = Parameter, y = Mean, fill = model)) +
-  ggplot2::geom_boxplot(position = ggplot2::position_dodge(width = 1)) +
-  labs(y = "Mean Parameter Outputs", x = "Parameter") +
-  theme_minimal()
+  ggplot2::geom_boxplot(position = ggplot2::position_dodge(width = 0.8)) +
+  ggplot2::labs(y = "Mean Parameter Outputs", x = "Parameter") +
+  ggplot2::theme_minimal()
 
-all_out %>%
+final_out %>%
   dplyr::filter(Parameter %in% c("sigma_d", "sigma_p")) %>%
   ggplot2::ggplot(ggplot2::aes(x = Parameter, y = Mean, fill = model)) +
   ggplot2::geom_boxplot(position = ggplot2::position_dodge(width = 1)) +
-  labs(y = "Mean Parameter Outputs", x = "Parameter") +
-  theme_minimal()
+  ggplot2::labs(y = "Mean Parameter Outputs", x = "Parameter") +
+  ggplot2::theme_minimal()
 
