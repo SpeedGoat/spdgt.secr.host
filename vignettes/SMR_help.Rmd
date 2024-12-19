@@ -1,0 +1,161 @@
+---
+title: "SMR Model Options"
+author: "Speedgoat"
+date: "2024-12-18"
+output: html_document
+---
+# Spatial Mark-Resight Model Options in R
+## Using the `mcmc_SMR` Function
+
+### Introduction
+The `mcmc_SMR` function implements a spatial mark-resight model that combines marking and resighting data to estimate population parameters. This document outlines the various options and configurations available based on your data structure and research needs.
+
+### 1. Activity Center Configuration
+Control how animal movement is modeled between marking and sighting phases:
+```r
+input = list(act_center = "move" | "no move")
+```
+* `"move"`: Allows activity centers to relocate between marking and sighting phases
+* `"no move"`: Assumes static activity centers
+  * Best for short study periods
+  * Recommended for sparse data
+  * More computationally efficient
+
+### 2. Observation Models
+Configure how detections are modeled in both marking and sighting processes:
+```r
+input = list(obstype = c("bernoulli", "poisson"))
+```
+
+Available combinations:
+| Marking Process | Sighting Process | Use Case |
+|----------------|------------------|-----------|
+| bernoulli | bernoulli | Binary detection in both phases |
+| bernoulli | poisson | Binary marking, count-based sightings |
+| poisson | bernoulli | Count-based marking, binary sightings |
+| poisson | poisson | Count-based for both processes |
+
+### 3. Identity Update Methods
+Specify how individual identities are updated in the MCMC process:
+```r
+input = list(IDup = "Gibbs" | "MH")
+```
+* `"Gibbs"`: Available only for Poisson observation models
+* `"MH"`: Required for Bernoulli observation models (Metropolis-Hastings algorithm)
+
+### 4. Data Structure Options
+
+#### Required Data Components
+```r
+data = list(
+    y_mark = array(),           # Marking capture histories
+    y_sight_marked = array(),   # Sighting histories for marked animals
+    y_sight_unmarked = array(), # Sighting histories for unmarked animals
+    X1 = matrix(),              # Marking location coordinates
+    X2 = matrix(),              # Sighting location coordinates
+    G_marked = matrix(),        # Genetic/categorical data for marked animals
+    G_unmarked = matrix()       # Genetic/categorical data for unmarked animals
+)
+```
+
+#### Optional Data Components
+```r
+data = list(
+    # Telemetry Data
+    locs = array(),  # Telemetry locations for marked individuals
+    
+    # Additional Sighting Types
+    y_sight_unk = array(),         # Sightings of unknown marked status
+    y_sight_marked_noID = array(), # Sightings of marked but unidentified individuals
+    
+    # Study Area Definition (choose one)
+    buff = numeric(),              # Buffer distance around trap locations
+    vertices = matrix(),           # Explicit polygon vertices of study area
+    
+    # Trap Operation Information
+    tf1 = matrix(),               # Trap operation times for marking process
+    tf2 = matrix(),               # Trap operation times for sighting process
+    markedS = matrix()            # Marking status by occasion
+)
+```
+
+### 5. Storage Configuration
+Control which model components are stored during MCMC:
+```r
+input = list(
+    storeLatent = TRUE | FALSE,  # Store individual identities and locations
+    storeGamma = TRUE | FALSE    # Store categorical covariate probabilities
+)
+```
+
+### 6. Process Types
+
+#### Complete Identity Information
+* Standard scenario with:
+  * Known marked individuals
+  * Unmarked individuals
+  * Basic spatial capture-recapture
+
+#### Partial Identity Information
+* Handles uncertainty in:
+  * Unknown marked status
+  * Marked but unidentified individuals
+  * Genetic/categorical markers
+
+#### Additional Data Integration
+* Flexibility to include:
+  * Telemetry data
+  * Variable trap operation times
+  * Different study area definitions
+
+### 7. Population Size Estimation
+Configure data augmentation for population size estimation:
+```r
+input = list(
+    M = 200  # Number of potential individuals in population
+)
+```
+* Adjustable based on expected population size
+* Enables estimation through data augmentation
+
+### 8. MCMC Settings
+Control the Markov Chain Monte Carlo process:
+```r
+input = list(
+    niter = 2400,   # Total iterations
+    nburn = 1200,   # Burn-in period
+    nthin = 5       # Thinning interval
+)
+```
+
+### Example Usage
+
+```r
+# Basic model with static activity centers
+result <- mcmc_SMR(
+    data = list(
+        y_mark = marking_data,
+        y_sight_marked = sighting_marked,
+        y_sight_unmarked = sighting_unmarked,
+        X1 = mark_coords,
+        X2 = sight_coords,
+        G_marked = genetic_marked,
+        G_unmarked = genetic_unmarked,
+        buff = 1000  # 1km buffer
+    ),
+    input = list(
+        act_center = "no move",
+        obstype = c("bernoulli", "poisson"),
+        IDup = "MH",
+        M = 200,
+        niter = 2400,
+        nburn = 1200,
+        nthin = 5
+    )
+)
+```
+
+### References
+* Spatial Capture-Recapture Models
+* Mark-Resight Analysis
+* Bayesian MCMC Methods
