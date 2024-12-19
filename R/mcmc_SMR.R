@@ -3,11 +3,11 @@
 
 #' Fit the generalized categorical spatial mark resight model. SMR_move fits the activity centers to cameras and snares separately whereas SMR fits them concurrently.
 #'
-#' Allowing for activity center relocation (act_center = "move") means the model
+#' Allowing for activity center relocation (mobile_center = "move") means the model
 #' incorporates a process for updating activity centers between the marking and
 #' sighting phases. If the data are sparse, there is no telemetry data, or if
 #' the study period is short, it may better to not allow for activity center
-#' relocation (act_center = "no move").
+#' relocation (mobile_center = "no move").
 #'
 #' @param data a data list
 #' @param input Model definitions and inputs
@@ -89,7 +89,7 @@
 mcmc_SMR <- function(
   data,
   input = list(
-    niter = 2400, nburn = 1200, nthin = 5, M = 200, act_center = "no move",
+    niter = 2400, nburn = 1200, nthin = 5, M = 200, mobile_center = F,
     inits = list(lam0_mark = 0.05, lam0_sight = 0.009, sigma_d = 0.1,
                  sigma_p = 0.1, s1 = 5, s2 = 5, psi = 0.5,
                  gamma = vector("list", 1)),
@@ -105,7 +105,7 @@ mcmc_SMR <- function(
 ){
 
   # Toggle activity center movement
-  act_center <- input$act_center
+  mobile_center <- input$mobile_center
 
   # Retrieve input parms
   niter <- input$niter
@@ -431,7 +431,7 @@ mcmc_SMR <- function(
   }
 
   # movement likelihood.
-  if (act_center == "move" & !is.null(y_mark)){
+  if (mobile_center & !is.null(y_mark)){
     ll_s2 <- log(dnorm(s2[, 1], s1[, 1], sigma_p) /
                    (pnorm(state_space$xlim[2], s1[, 1], sigma_p) -
                       pnorm(state_space$xlim[1], s1[, 1], sigma_p)))
@@ -805,7 +805,7 @@ mcmc_SMR <- function(
     ###################################
     # Update activity centers
     ###################################
-    if (act_center == "move") {
+    if (mobile_center) {
       s_2_accept <- 0
       s_1_accept <- 0
       # s1 - activity centers for marked individuals
@@ -1001,7 +1001,7 @@ mcmc_SMR <- function(
 
 
     # update sigma_p
-    if (act_center == "move" & !is.null(y_mark)){
+    if (mobile_center & !is.null(y_mark)){
       sigma_p_cand <- rnorm(1, sigma_p, proppars$sigma_p)
 
       if (sigma_p_cand > 0) {
@@ -1066,16 +1066,19 @@ mcmc_SMR <- function(
         dplyr::mutate(label = factor(label, names(proppars))) %>%
         dplyr::arrange(label)
 
-      # Vectorized adjustment of tuning parameters
-      target_rate <- 0.45
-      adjustment_factor <- 1 - abs(mean_accept$val - target_rate)
+      # Adjust tuning parms
+      proppars[mean_accept$val > 0.55] <-
+        unlist(proppars[mean_accept$val > 0.55]) /
+        (1-abs(mean_accept$val[mean_accept$val > 0.55] - 0.55))
+      proppars[mean_accept$val < 0.35] <-
+        unlist(proppars[mean_accept$val < 0.35]) *
+        (1-abs(mean_accept$val[mean_accept$val < 0.35] - 0.35))
 
-      # Update proppars
-      proppars <- Map(function(prop, accept) {
-        new_val <- if (accept > target_rate) prop / adjustment_factor else prop * adjustment_factor
-        # Apply bounds in one step
-        pmin(pmax(new_val, min_proppars, 1e-5), max_proppars)
-      }, proppars, mean_accept$val)
+      proppars[which(unlist(proppars) < 0)] <- 1e-5
+
+      # Bound tuning parms
+      proppars[proppars > unlist(max_proppars)] <- max_proppars[proppars > unlist(max_proppars)]
+      proppars[proppars < unlist(min_proppars)] <- min_proppars[proppars < unlist(min_proppars)]
     }
   } # end of MCMC algorithm
   # CheckID
