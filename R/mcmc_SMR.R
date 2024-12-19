@@ -9,14 +9,13 @@
 #' the study period is short, it may better to not allow for activity center
 #' relocation (act_center = "no move").
 #'
-#' @param data a data list as formatted by sim.genCatSMR(). See description for more details.
+#' @param data a data list
 #' @param input Model definitions and inputs
 #' @description This function fits the generalized categorical spatial mark resight model.
 #' Modelling the marking process relaxes the assumption that the distribution of marked
 #' individuals across the landscape is spatially uniform.
 #'
-#' the data list should be formatted to match the list outputted by
-#' sim.genCatSMR(), but not all elements of that object are necessary.
+#' the data list should all elements of that object are necessary.
 #' y_mark, y_sight_marked, y_sight_unmarked, G_marked, and G_unmarked are necessary
 #' list elements. y_sight_x and G_x for x=unk and marke.noID are necessary if there are samples
 #' of unknown marked status or samples from marked samples without individual identities.
@@ -252,7 +251,7 @@ mcmc_SMR <- function(
   y_sight_all <- initialize_capture_histories(
     y_sight_latent, y_sight_true, y_sight_marked, y_mark, status, ID, M,
     n_marked, n_samp_latent, X1, X2, G_marked, G_marked_noID, constraints,
-    Kconstraints, useMarkednoID
+    Kconstraints, useMarkednoID, data$markedS
   )
   y_sight_true <- y_sight_all$y_sight_true
   ID <- y_sight_all$ID
@@ -1140,9 +1139,10 @@ process_spatial_points <- function(M, state_space, y_sight_true, Xall,
   s1 <- cbind(runif(M, state_space$xlim[1], state_space$xlim[2]),
               runif(M, state_space$ylim[1], state_space$ylim[2]))
 
+
   # Combine mark and sight data if available
   y_all2D <- if (!is.null(y_mark)) {
-    cbind(y_mark2D, y_sight_true)
+    cbind(apply(y_mark, c(1, 2), sum), y_sight_true)
   } else {
     y_sight_true
   }
@@ -1266,10 +1266,10 @@ init_useUM <- function(data) {
 }
 
 # Initialize Capture Histories for Spatial Capture-Recapture
-initialize_capture_histories <- function(y_sight_latent, y_sight_true, y_sight_marked,
-                                         y_mark = NULL, status, ID, M, n_marked,
-                                         n_samp_latent, X1, X2, G_marked, G_marked_noID,
-                                         constraints, Kconstraints, useMarkednoID = TRUE) {
+initialize_capture_histories <- function(
+    y_sight_latent, y_sight_true, y_sight_marked, y_mark = NULL, status, ID, M,
+    n_marked, n_samp_latent, X1, X2, G_marked, G_marked_noID, constraints,
+    Kconstraints, useMarkednoID = TRUE, markedS) {
 
   # Input validation
   if (!is.array(y_sight_latent) || !is.array(y_sight_true)) {
@@ -1391,7 +1391,7 @@ initialize_capture_histories <- function(y_sight_latent, y_sight_true, y_sight_m
   }
 
   if (!is.null(y_mark)) {
-    if (any(data$markedS == 0 | data$markedS == 2)) {
+    if (any(markedS == 0 | markedS == 2)) {
       check <- which(ID <= n_marked)
       for (i in check) {
         if (Kconstraints[ID[i], i] == 0) {
@@ -1677,10 +1677,10 @@ define_state_space <- function(data, Xall = NULL) {
 # Check inputs
 input_check <- function(input) {
 
-  if (!IDup %in% c("MH", "Gibbs")) {
+  if (!input$IDup %in% c("MH", "Gibbs")) {
     stop("IDup must be MH or Gibbs")
   }
-  if (obstype[2] == "bernoulli" & IDup == "Gibbs") {
+  if (input$obstype[2] == "bernoulli" & input$IDup == "Gibbs") {
     stop("Must use MH IDup for bernoulli data")
   }
 }
