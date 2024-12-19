@@ -2,7 +2,8 @@
 # Marked individuals are captured with snares and may be used with telemetry data. Relevant data parms are X1.in (snare locations), snares.in (individual tags and tag ids, capture history for each snare). Effort is recorded in effort.in
 # Marked ("tagged") and unmarked ("unmarked") individuals are captured at cameras at camera locations, X2.in. Capture histories are recorded in cams.in with number captured (n.det), sex, marked (also tag.class), and gps (unused). Effort is extrapolated from the number of unique dates in cams.in
 
-# We can probably reorganize this...
+devtools::load_all()
+
 library(dplyr)
 library(doParallel)
 
@@ -36,7 +37,7 @@ storeGamma <- TRUE
 # niter <- 50000
 # nburn <- 40000
 # nthin <- 1
-niter <- 5000
+niter <- 2000
 nburn <- 1000
 nthin <- 1
 
@@ -188,7 +189,7 @@ mean_N <- c()
 SD_N <- c()
 
 input <- list(
-  niter = niter, nburn = nburn, nthin = nthin, M = M, act_center = "no move",
+  niter = niter, nburn = nburn, nthin = nthin, M = M, act_center = F,
   inits = list(lam0_mark = 0.05, lam0_sight = 0.009, sigma_d = 5,
                sigma_p = 5, s1 = 5, s2 = 5, psi = 0.5,
                gamma = vector("list", 1)),

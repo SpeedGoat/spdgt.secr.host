@@ -3,6 +3,8 @@
 # Marked ("tagged") and unmarked ("unmarked") individuals are captured at cameras at camera locations, X.in. Capture histories are recorded in cams.in with number captured (n.det), sex, marked (also tag.class), and gps (unused). Effort is extrapolated from the number of unique dates in cams.in
 
 # No snares were used for this run. Conventional SMR is used (no trap markings)
+devtools::load_all()
+
 library(dplyr)
 library(doParallel)
 
@@ -48,7 +50,7 @@ storeGamma <- TRUE
 # niter <- 30000
 # nburn <- 20000
 # nthin <- 1
-niter <- 5000
+niter <- 2000
 nburn <- 1000
 nthin <- 1
 
@@ -193,7 +195,7 @@ mean_N <- c()
 SD_N <- c()
 
 input <- list(
-  niter = niter, nburn = nburn, nthin = 1, M = M, act_center = "no move",
+  niter = niter, nburn = nburn, nthin = 1, M = M, act_center = F,
   inits = list(lam0_mark = NA, lam0_sight = 0.05, sigma_d = 5,
                sigma_p = NA, s1 = NA, s2 = 5, psi = 0.5,
                gamma = gamma),
