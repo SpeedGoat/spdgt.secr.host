@@ -14,7 +14,7 @@ SMR_wrapper <- function(data, input) {
 
   # Validate inputs
   if (length(model_choices) == 0) {
-    stop("At least one option must be chosen")
+    stop("At least one model must be selected")
   }
 
   # Define model options
