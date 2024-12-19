@@ -58,7 +58,7 @@ SMR_wrapper <- function(data, input) {
 
       } else if (model == 2) {
         # Tele, No Mobile
-        input$mobile_center <- "no move"
+        input$mobile_center <- F
 
         out <- mcmc_SMR(data, input)
 
@@ -69,7 +69,7 @@ SMR_wrapper <- function(data, input) {
         data_no_tele <- data
         data_no_tele$locs <- NA
 
-        input$mobile_center <- "move"
+        input$mobile_center <- T
 
         out <- mcmc_SMR(data_no_tele, input)
 
@@ -80,7 +80,7 @@ SMR_wrapper <- function(data, input) {
         data_no_tele <- data
         data_no_tele$locs <- NA
 
-        input$mobile_center <- "no move"
+        input$mobile_center <- F
 
         out <- mcmc_SMR(data_no_tele, input)
 
