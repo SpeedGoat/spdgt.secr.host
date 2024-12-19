@@ -469,13 +469,11 @@ mcmc_SMR <- function(
           lamd_trap <- lamd_trap_cand
           pd_trap <- pd_trap_cand
           ll_y_mark <- ll_y_mark_cand
-          accept_rates <- accept_rates %>%
-            dplyr::mutate(
-              accept = dplyr::case_when(
-                acc_iter == iter & label == "lam0_mark" ~ 1,
-                .default = accept
-              )
-            )
+
+          # Update acceptance rates
+          accept_rates$accept[accept_rates$acc_iter == iter &
+                                accept_rates$label == "lam0_mark"] <- 1
+
         }
       }
     } else {
@@ -512,11 +510,11 @@ mcmc_SMR <- function(
         pd_sight <- pd_sight_cand
         ll_y_sight <- ll_y_sight_cand
         llysightsum <- sum(ll_y_sight_cand)
-        accept_rates <- accept_rates %>%
-          dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                    label == "lam0_sight" ~
-                                                    1,
-                                                  .default = accept))
+
+        # Update acceptance rates
+        accept_rates$accept[accept_rates$acc_iter == iter &
+                              accept_rates$label == "lam0_sight"] <- 1
+
       }
     }
 
@@ -567,11 +565,11 @@ mcmc_SMR <- function(
         ll_y_mark <- ll_y_mark_cand
         ll_y_sight <- ll_y_sight_cand
         ll_tel <- ll_tel_cand
-        accept_rates <- accept_rates %>%
-          dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                    label == "sigma_d" ~
-                                                    1,
-                                                  .default = accept))
+
+        # Update acceptance rates
+        accept_rates$accept[accept_rates$acc_iter == iter &
+                              accept_rates$label == "sigma_d"] <- 1
+
         if (obstype[1] == "bernoulli") {
           pd_trap <- pd_trap_cand
         }
@@ -996,37 +994,34 @@ mcmc_SMR <- function(
       }
     }
 
-    accept_rates <- accept_rates %>%
-      dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                label == "s1" ~
-                                                sum(s_1_accept) / M,
-                                              .default = accept))
-    accept_rates <- accept_rates %>%
-      dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                label == "s2" ~
-                                                sum(s_2_accept) / M,
-                                              .default = accept))
-
+    # Update acceptance rates
+    accept_rates$accept[accept_rates$acc_iter == iter &
+                          accept_rates$label == "s1"] <- sum(s_1_accept) / M
+    accept_rates$accept[accept_rates$acc_iter == iter &
+                          accept_rates$label == "s2"] <- sum(s_2_accept) / M
 
 
     # update sigma_p
     if (act_center == "move" & !is.null(y_mark)){
       sigma_p_cand <- rnorm(1, sigma_p, proppars$sigma_p)
+
       if (sigma_p_cand > 0) {
         ll_s2_cand <- log(dnorm(s2[, 1], s1[, 1], sigma_p_cand) /
-                            (pnorm(state_space$xlim[2], s1[, 1], sigma_p_cand) - pnorm(state_space$xlim[1], s1[, 1], sigma_p_cand)))
-        ll_s2_cand <- ll_s2_cand + log(dnorm(s2[, 2], s1[, 2], sigma_p_cand) /
-                                         (pnorm(state_space$ylim[2], s1[, 2], sigma_p_cand) - pnorm(state_space$ylim[1], s1[, 2], sigma_p_cand)))
+                            (pnorm(state_space$xlim[2], s1[, 1], sigma_p_cand) -
+                               pnorm(state_space$xlim[1], s1[, 1], sigma_p_cand)))
+        ll_s2_cand <- ll_s2_cand +
+          log(dnorm(s2[, 2], s1[, 2], sigma_p_cand) /
+                (pnorm(state_space$ylim[2], s1[, 2], sigma_p_cand) -
+                   pnorm(state_space$ylim[1], s1[, 2], sigma_p_cand)))
 
 
         if (runif(1) < exp(sum(ll_s2_cand) - sum(ll_s2))) {
           sigma_p <- sigma_p_cand
           ll_s2 <- ll_s2_cand
-          accept_rates <- accept_rates %>%
-            dplyr::mutate(accept = dplyr::case_when(acc_iter == iter &
-                                                      label == "sigma_p" ~
-                                                      1,
-                                                    .default = accept))
+
+          # Update acceptance rates
+          accept_rates$accept[accept_rates$acc_iter == iter &
+                                accept_rates$label == "sigma_p"] <- 1
         }
       }
     }
@@ -1058,42 +1053,30 @@ mcmc_SMR <- function(
 
     # Update tuning parms
     if(iter%%tune_check == 0){
-      batch_n <- batch_n+1
+      # Update batch counter and delta
+      batch_n <- batch_n + 1
       delta_n <- batch_n^-1
-      # delta_n <- min(0.001,batch_n^-1)
+
+      # Calculate mean acceptance rates
       mean_accept <- accept_rates %>%
         dplyr::group_by(label) %>%
-        dplyr::filter(acc_iter > (iter - tune_check + 1) & acc_iter <= iter) %>%
-        dplyr::summarise(val = sum(accept)/tune_check) #Need to add/subtract 1 to tune check?
-
-      # # Account for augmented data
-      # mean_accept$val[mean_accept$label == "s1"] <- mean_accept$val[mean_accept$label == "s1"]/M
-      # mean_accept$val[mean_accept$label == "s2"] <- mean_accept$val[mean_accept$label == "s2"]/M
-
-      # # Add missing proppars
-      # noname_index <- which(!(names(proppars) %in% mean_accept$label))
-      # if (length(noname_index) > 0) {
-      #   mean_accept <- mean_accept %>%
-      #     dplyr::add_row(label = names(proppars)[noname_index],
-      #             val = 0.45)
-      # }
-      mean_accept <- mean_accept %>%
+        dplyr::filter(acc_iter > (iter - tune_check) & acc_iter <= iter) %>%
+        dplyr::summarise(
+          val = mean(accept)
+        ) %>%
         dplyr::mutate(label = factor(label, names(proppars))) %>%
         dplyr::arrange(label)
 
-      # Adjust tuning parms with nonpropotional values
-      # proppars[mean_accept$val > 0.45] <- unlist(proppars[mean_accept$val > 0.45]) + delta_n
-      # proppars[mean_accept$val < 0.45] <- unlist(proppars[mean_accept$val < 0.45]) - delta_n
+      # Vectorized adjustment of tuning parameters
+      target_rate <- 0.45
+      adjustment_factor <- 1 - abs(mean_accept$val - target_rate)
 
-      # Adjust tuning parms proportional to acceptance rates
-      proppars[mean_accept$val > 0.45] <- unlist(proppars[mean_accept$val > 0.45])/(1-abs(mean_accept$val[mean_accept$val > 0.45] - 0.45))
-      proppars[mean_accept$val < 0.45] <- unlist(proppars[mean_accept$val < 0.45])*(1-abs(mean_accept$val[mean_accept$val < 0.45] - 0.45))
-      proppars[which(unlist(proppars) < 0)] <- 1e-5
-
-      # Bound tuning parms
-      proppars[proppars > unlist(max_proppars)] <- max_proppars[proppars > unlist(max_proppars)]
-      proppars[proppars < unlist(min_proppars)] <- min_proppars[proppars < unlist(min_proppars)]
-    }
+      # Update proppars
+      proppars <- Map(function(prop, accept) {
+        new_val <- if (accept > target_rate) prop / adjustment_factor else prop * adjustment_factor
+        # Apply bounds in one step
+        pmin(pmax(new_val, min_proppars, 1e-5), max_proppars)
+      }, proppars, mean_accept$val)
   } # end of MCMC algorithm
   # CheckID
   if (any(data$markedS == 0 | data$markedS == 2)) { # capture order constraints
