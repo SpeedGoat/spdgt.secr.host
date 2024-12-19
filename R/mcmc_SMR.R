@@ -281,7 +281,7 @@ mcmc_SMR <- function(
 
   # Optimize starting locations given where they are trapped.
   s1 <- process_spatial_points(M, state_space, y_sight_true, Xall,
-                               y_mark, point_in_area)
+                               y_mark)
   s2 <- s1
 
   # collapse unmarked data to 2D
@@ -812,7 +812,7 @@ mcmc_SMR <- function(
       for (i in 1:M) {
         Scand <- c(rnorm(1, s1[i, 1], proppars$s1), rnorm(1, s1[i, 2], proppars$s1))
 
-        inbox <- point_in_area(Scand, state_space$xlim, state_space$ylim, state_space$vertices, state_space$useverts)
+        inbox <- point_in_area(Scand, state_space)
         if (inbox) {
           d1tmp <- sqrt((Scand[1] - X1[, 1])^2 + (Scand[2] - X1[, 2])^2)
           lamd_trap_cand[i, ] <- lam0_mark *
@@ -857,7 +857,7 @@ mcmc_SMR <- function(
                      rnorm(1, s2[i, 2], proppars$s2))
         }
 
-        inbox <- point_in_area(Scand, state_space$xlim, state_space$ylim, state_space$vertices, state_space$useverts)
+        inbox <- point_in_area(Scand, state_space)
         if (inbox) {
           d2tmp <- sqrt((Scand[1] - X2[, 1])^2 + (Scand[2] - X2[, 2])^2)
           lamd_sight_cand[i, ] <- lam0_sight *
@@ -919,7 +919,7 @@ mcmc_SMR <- function(
                      rnorm(1, s2[i, 2], proppars$s2))
         }
 
-        inbox <- point_in_area(Scand, state_space$xlim, state_space$ylim, state_space$vertices, state_space$useverts)
+        inbox <- point_in_area(Scand, state_space)
         if (inbox) {
 
           if (!is.null(y_mark)) {
@@ -980,7 +980,6 @@ mcmc_SMR <- function(
             ll_y_mark[i, ] <- ll_y_mark_cand[i, ]
             ll_y_sight[i, ] <- ll_y_sight_cand[i, ]
             if (i %in% telguys) ll_tel[i, ] <- ll_tel_cand[i, ]
-            # ll_s2[i] <- ll_s2_cand[i]
             s_1_accept <- s_1_accept + 1
             s_2_accept <- s_2_accept + 1
             if (obstype[1] == "bernoulli") {
@@ -1117,7 +1116,7 @@ mcmc_SMR <- function(
 
 # Process spatial points with constraints and adjustments
 process_spatial_points <- function(M, state_space, y_sight_true, Xall,
-                                   y_mark = NULL, point_in_area) {
+                                   y_mark = NULL) {
   # Initialize random points within state space
   s1 <- cbind(runif(M, state_space$xlim[1], state_space$xlim[2]),
               runif(M, state_space$ylim[1], state_space$ylim[2]))
@@ -1147,7 +1146,7 @@ process_spatial_points <- function(M, state_space, y_sight_true, Xall,
 
     # Check all points
     for (i in 1:nrow(s1)) {
-      inside[i] <- point_in_area(s1[i, ], state_space$vertices)
+      inside[i] <- point_in_area(s1[i, ], state_space)
     }
 
     # Adjust points that fall outside the area
@@ -1157,7 +1156,7 @@ process_spatial_points <- function(M, state_space, y_sight_true, Xall,
         while (inside[idx[i]] == FALSE) {
           s1[idx[i], ] <- c(runif(1, state_space$xlim[1], state_space$xlim[2]),
                             runif(1, state_space$ylim[1], state_space$ylim[2]))
-          inside[idx[i]] <- point_in_area(s1[idx[i], ], state_space$vertices)
+          inside[idx[i]] <- point_in_area(s1[idx[i], ], state_space)
         }
       }
     }
@@ -1774,36 +1773,33 @@ pairwise_distances <- function(x, y = NULL) {
 
 # Check if a Point is Inside a Study Area
 point_in_area <- function(point,
-                          xlim = NULL,
-                          ylim = NULL,
-                          vertices = NULL,
-                          use_vertices = FALSE) {
+                          state_space) {
   # Validate inputs
   if (!is.numeric(point) || length(point) != 2) {
     stop("point must be a numeric vector of length 2")
   }
 
   # Check using rectangular boundaries
-  if (!use_vertices) {
+  if (!state_space$useverts) {
     # Require both xlim and ylim for rectangular check
-    if (is.null(xlim) || is.null(ylim) ||
-        length(xlim) != 2 || length(ylim) != 2) {
+    if (is.null(state_space$xlim) || is.null(state_space$ylim) ||
+        length(state_space$xlim) != 2 || length(state_space$ylim) != 2) {
       stop("For rectangular check, provide valid xlim and ylim")
     }
 
     return(
-      point[1] < xlim[2] &
-        point[1] > xlim[1] &
-        point[2] < ylim[2] &
-        point[2] > ylim[1]
+      point[1] < state_space$xlim[2] &
+        point[1] > state_space$xlim[1] &
+        point[2] < state_space$ylim[2] &
+        point[2] > state_space$ylim[1]
     )
   }
 
   # Check using polygon vertices
-  if (use_vertices) {
+  if (state_space$useverts) {
     # Require vertices
-    if (is.null(vertices)) {
-      stop("When use_vertices = TRUE, vertices must be provided")
+    if (is.null(state_space$vertices)) {
+      stop("When useverts = TRUE, vertices must be provided")
     }
 
     # Recommend sp package if not already in namespace
@@ -1812,7 +1808,7 @@ point_in_area <- function(point,
     }
 
     # Determine if point is in polygon
-    return(in_poly(point, vertices))
+    return(in_poly(point, state_space$vertices))
   }
 }
 
