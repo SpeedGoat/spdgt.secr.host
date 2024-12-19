@@ -1076,6 +1076,7 @@ mcmc_SMR <- function(
         # Apply bounds in one step
         pmin(pmax(new_val, min_proppars, 1e-5), max_proppars)
       }, proppars, mean_accept$val)
+    }
   } # end of MCMC algorithm
   # CheckID
   if (any(data$markedS == 0 | data$markedS == 2)) { # capture order constraints
