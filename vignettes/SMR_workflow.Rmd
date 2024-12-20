@@ -3,7 +3,7 @@ title: "Getting Started with Spatial Mark-Resight Models"
 author: "Speedgoat"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteIndexEntry{Getting Started with Spatial Mark-Resight Models}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
