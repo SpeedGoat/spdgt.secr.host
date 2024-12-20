@@ -33,7 +33,7 @@ SMR_wrapper <- function(data, input) {
     dplyr::filter(ID %in% model_choices) %>%
     dplyr::pull(ID)
 
-  my_cluster <- makeCluster(6, type = "PSOCK")
+  my_cluster <- parallel::makeCluster(6, type = "PSOCK")
   #register cluster to be used by %dopar%
   doParallel::registerDoParallel(cl = my_cluster)
 
