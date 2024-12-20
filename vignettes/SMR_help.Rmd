@@ -1,8 +1,11 @@
 ---
 title: "SMR Model Options"
 author: "Speedgoat"
-date: "2024-12-18"
-output: html_document
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 # Spatial Mark-Resight Model Options in R
 ## Using the `mcmc_SMR` Function
