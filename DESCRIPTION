@@ -15,7 +15,7 @@ Authors@R: c(
            family = "Martin",
            role = "aut",
            email = "hans.martin@speedgoat.io"))
-Description: Code base for all capture-recapture models, including mark-recapture, spatial capture-recapture, and mark-resight
+Description: Code base for all capture-recapture models, including mark-recapture, spatial capture-recapture, and mark-resight.
 License: MIT + file LICENSE
 Imports: 
     dplyr,
@@ -23,6 +23,11 @@ Imports:
     foreach,
     tibble,
     tidyr
+Suggests: 
+    knitr, 
+    sp,
+    rmarkdown
+VignetteBuilder: knitr
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
