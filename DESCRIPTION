@@ -21,11 +21,13 @@ Imports:
     dplyr,
     doParallel,
     foreach,
+    magrittr,
+    rlang,
+    stats,
     tibble,
     tidyr
 Suggests: 
     knitr, 
-    sp,
     rmarkdown
 VignetteBuilder: knitr
 Encoding: UTF-8
