@@ -3,3 +3,5 @@
 .RData
 .Ruserdata
 .secrets
+vignettes/SMR_example_NM.R
+vignettes/SMR_example_NM_no_trap.R
