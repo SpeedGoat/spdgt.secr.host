@@ -1,0 +1,505 @@
+---
+title: "Getting Started with Spatial Mark-Resight Models"
+author: "Speedgoat"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+CURRENTLY NOT RUNNING
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# Introduction
+
+The `spdgt.secr.host` package implements spatial mark-resight (SMR) models for analyzing capture-recapture data with spatial information. This vignette demonstrates how to:
+
+1. Format your data for SMR analysis
+2. Fit SMR models using different configurations
+3. Interpret model results
+4. Compare different model variants
+
+## Installation
+
+You can install the released version of smr from CRAN with:
+
+```{r eval=FALSE}
+install.packages("smr")
+```
+
+Or install the development version from GitHub with:
+
+```{r eval=FALSE}
+# install.packages("devtools")
+devtools::install_github("username/smr")
+```
+
+## Required Packages
+
+```{r setup}
+library(spdgt.secr.host)
+library(dplyr)
+library(doParallel)
+```
+
+# Data Preparation
+
+Let's create a simulated dataset to demonstrate the model. First, we'll set up our study area and sampling design:
+
+```{r data-setup}
+# Set random seed for reproducibility
+set.seed(123)
+
+# Study area parameters
+xlim <- c(0, 10)
+ylim <- c(0, 10)
+buff <- 2
+
+# Trap and camera locations
+n_traps <- 20
+n_cameras <- 25
+
+# Generate random trap locations
+X1 <- data.frame(
+  x = runif(n_traps, xlim[1], xlim[2]),
+  y = runif(n_traps, ylim[1], ylim[2])
+)
+
+# Generate random camera locations
+X2 <- data.frame(
+  x = runif(n_cameras, xlim[1], xlim[2]),
+  y = runif(n_cameras, ylim[1], ylim[2])
+)
+```
+
+Next, we'll set up population parameters and generate capture histories:
+
+```{r population-setup}
+# Population parameters
+N <- 50  # True population size
+n_marked <- 20  # Number of marked individuals
+K1 <- 5  # Number of marking occasions
+K2 <- 10  # Number of resighting occasions
+
+# Movement and detection parameters
+sigma_d <- 0.5  # Detection scale parameter
+sigma_p <- 1.0  # Movement scale parameter
+lam0_mark <- 0.1  # Baseline marking rate
+lam0_sight <- 0.05  # Baseline sighting rate
+
+# Generate activity centers
+s <- data.frame(
+  x = runif(N, xlim[1], xlim[2]),
+  y = runif(N, ylim[1], ylim[2])
+)
+
+# Initialize capture history arrays
+y_mark <- array(0, dim = c(n_marked, n_traps, K1))
+y_sight_marked <- array(0, dim = c(n_marked, n_cameras, K2))
+y_sight_unmarked <- array(0, dim = c(N - n_marked, n_cameras, K2))
+
+# Simulate some captures (simplified for demonstration)
+# In real applications, you would simulate based on detection probabilities
+for(i in 1:n_marked) {
+  y_mark[i,,] <- matrix(rbinom(n_traps*K1, 1, lam0_mark), n_traps, K1)
+  y_sight_marked[i,,] <- matrix(rbinom(n_cameras*K2, 1, lam0_sight), n_cameras, K2)
+}
+for(i in 1:(N-n_marked)) {
+  y_sight_unmarked[i,,] <- matrix(rbinom(n_cameras*K2, 1, lam0_sight), n_cameras, K2)
+}
+```
+
+We'll also generate some genetic data and telemetry locations:
+
+```{r genetic-telemetry}
+# Generate genetic data
+n_loci <- 3
+n_alleles <- 4
+
+# Function to generate random genotypes
+generate_genotype <- function(n_loci, n_alleles) {
+  matrix(sample(1:n_alleles, n_loci, replace = TRUE), nrow = 1)
+}
+
+# Generate genetic data
+G_marked <- do.call(rbind, replicate(n_marked, 
+                                    generate_genotype(n_loci, n_alleles), 
+                                    simplify = FALSE))
+G_unmarked <- do.call(rbind, replicate(N - n_marked, 
+                                      generate_genotype(n_loci, n_alleles), 
+                                      simplify = FALSE))
+
+# Create telemetry data
+n_telemetry_locs <- 5
+locs <- array(NA, dim = c(n_marked, n_telemetry_locs, 2))
+
+# Generate telemetry locations for first 10 marked individuals
+for(i in 1:10) {
+  for(j in 1:n_telemetry_locs) {
+    locs[i,j,] <- c(
+      rnorm(1, s$x[i], sigma_p),
+      rnorm(1, s$y[i], sigma_p)
+    )
+  }
+}
+```
+
+# Model Fitting
+
+## Data Organization
+
+First, we need to organize our data into the format expected by the SMR functions:
+
+```{r data-organization}
+data <- list(
+  y_mark = y_mark,
+  y_sight_marked = y_sight_marked,
+  y_sight_unmarked = y_sight_unmarked,
+  X1 = as.matrix(X1),
+  X2 = as.matrix(X2),
+  K1 = K1,
+  K2 = K2,
+  buff = buff,
+  n_marked = n_marked,
+  G_marked = G_marked,
+  G_unmarked = G_unmarked,
+  IDlist = list(
+    ncat = n_loci,
+    nallele = rep(n_alleles, n_loci),
+    IDcovs = replicate(n_loci, 1:n_alleles, simplify = FALSE)
+  ),
+  locs = locs
+)
+```
+
+## Model Configuration
+
+We'll set up the model input parameters:
+
+```{r model-config}
+input <- list(
+  niter = 1000,  # Number of MCMC iterations
+  nburn = 500,   # Number of burn-in iterations
+  nthin = 2,     # Thinning interval
+  M = 100,       # Data augmentation parameter
+  model_choices = c(1,2,3,4),  # Run all model variants
+  inits = list(
+    lam0_mark = 0.05,
+    lam0_sight = 0.01,
+    sigma_d = 0.5,
+    sigma_p = 1.0,
+    psi = 0.5,
+    gamma = replicate(n_loci, rep(1/n_alleles, n_alleles), simplify = FALSE)
+  ),
+  obstype = c("bernoulli", "poisson"),
+  proppars = list(
+    lam0_mark = 0.02,
+    lam0_sight = 0.02,
+    sigma_d = 0.1,
+    sigma_p = 0.2,
+    s1 = 0.3,
+    s2 = 0.3,
+    s2t = 0.1
+  ),
+  max_proppars <- list(lam0_mark = 100, lam0_sight = 100, sigma_d = 100,
+                       sigma_p = 100, s1 = 100, s2 = 100, s2t = 100),
+  min_proppars <- list(lam0_mark = .001, lam0_sight = .001, sigma_d = .001,
+                       sigma_p = .001, s1 = .001, s2 = .001, s2t = .001),
+  nswap = NA,
+  storeLatent = TRUE, 
+  storeGamma = TRUE, 
+  IDup = "Gibbs"
+)
+```
+
+## Running the Model
+
+Now we can fit the model using the wrapper function:
+
+```{r model-fitting, eval=FALSE}
+results <- SMR_wrapper(data, input)
+```
+
+```{r show-results, eval=FALSE}
+# View summary of results
+results %>%
+  spread(model, Mean) %>%
+  arrange(Parameter)
+```
+
+# Understanding Model Output
+
+The SMR model provides estimates for several key parameters:
+
+1. Detection Parameters:
+   - `lam0_mark`: Baseline probability of marking
+   - `lam0_sight`: Baseline probability of resighting
+   - `sigma_d`: Scale parameter for detection function
+
+2. Movement Parameters:
+   - `sigma_p`: Scale parameter for movement between marking and resighting
+
+3. Population Parameters:
+   - `N`: Population size estimate
+   - `psi`: Data augmentation parameter
+   - `D`: Density estimate (derived)
+
+## Model Variants
+
+The wrapper function can fit four different model variants:
+
+1. "Tele and Mobile": 
+   - Uses telemetry data
+   - Allows activity centers to move
+   - Best when you have telemetry data and expect movement
+
+2. "Tele and No Mobile":
+   - Uses telemetry data
+   - Assumes static activity centers
+   - Suitable for short study periods with telemetry
+
+3. "No Tele and Mobile":
+   - No telemetry data
+   - Allows activity center movement
+   - Use when you expect movement but lack telemetry
+
+4. "No Tele and No Mobile":
+   - Basic model
+   - No telemetry, static centers
+   - Most parsimonious when movement is minimal
+
+# Advanced Features
+
+## Handling Trap Operation
+
+You can account for varying trap effort using the `tf1` and `tf2` parameters:
+
+```{r trap-operation, eval=FALSE}
+# Example of varying trap effort
+tf1 <- matrix(rpois(n_traps*K1, 5), n_traps, K1)  # Trap nights for marking
+tf2 <- matrix(rpois(n_cameras*K2, 5), n_cameras, K2)  # Camera nights for resighting
+
+data$tf1 <- tf1
+data$tf2 <- tf2
+```
+
+## Using Custom State Space
+
+Instead of a buffer, you can define a custom state space using vertices:
+
+```{r state-space, eval=FALSE}
+# Example of custom state space
+vertices <- data.frame(
+  x = c(0, 10, 10, 0),
+  y = c(0, 0, 10, 10)
+)
+
+data$vertices <- as.matrix(vertices)
+data$buff <- NULL  # Remove buffer when using vertices
+```
+
+# Example 2: Camera-Only Data
+
+In many studies, researchers may only have camera trap data without a physical capture component. Here's how to analyze such data:
+
+```{r camera-only-setup}
+# Set random seed for reproducibility
+set.seed(456)
+
+# Study area parameters
+xlim <- c(0, 10)
+ylim <- c(0, 10)
+buff <- 2
+
+# Camera locations only (no traps)
+n_cameras <- 40  # More cameras since it's the only data source
+
+# Generate random camera locations
+X2 <- data.frame(
+  x = runif(n_cameras, xlim[1], xlim[2]),
+  y = runif(n_cameras, ylim[1], ylim[2])
+)
+
+# Population parameters
+N <- 50  # True population size
+n_marked <- 15  # Number of marked individuals (marked through other means)
+K2 <- 20  # Number of resighting occasions (longer survey)
+
+# Detection parameters
+sigma_d <- 0.5  # Detection scale parameter
+lam0_sight <- 0.08  # Baseline sighting rate (higher since no physical capture)
+
+# Generate activity centers
+s <- data.frame(
+  x = runif(N, xlim[1], xlim[2]),
+  y = runif(N, ylim[1], ylim[2])
+)
+
+# Initialize sighting arrays (no marking array needed)
+y_sight_marked <- array(0, dim = c(n_marked, n_cameras, K2))
+y_sight_unmarked <- array(0, dim = c(N - n_marked, n_cameras, K2))
+
+# Simulate sightings
+for(i in 1:n_marked) {
+  y_sight_marked[i,,] <- matrix(rbinom(n_cameras*K2, 1, lam0_sight), n_cameras, K2)
+}
+for(i in 1:(N-n_marked)) {
+  y_sight_unmarked[i,,] <- matrix(rbinom(n_cameras*K2, 1, lam0_sight), n_cameras, K2)
+}
+
+# Generate genetic data
+n_loci <- 3
+n_alleles <- 4
+
+G_marked <- do.call(rbind, replicate(n_marked, 
+                                    generate_genotype(n_loci, n_alleles), 
+                                    simplify = FALSE))
+G_unmarked <- do.call(rbind, replicate(N - n_marked, 
+                                      generate_genotype(n_loci, n_alleles), 
+                                      simplify = FALSE))
+
+# Create telemetry data (if available)
+n_telemetry_locs <- 5
+locs <- array(NA, dim = c(n_marked, n_telemetry_locs, 2))
+
+# Generate telemetry locations for first 8 marked individuals
+for(i in 1:8) {
+  for(j in 1:n_telemetry_locs) {
+    locs[i,j,] <- c(
+      rnorm(1, s$x[i], sigma_p),
+      rnorm(1, s$y[i], sigma_p)
+    )
+  }
+}
+
+# Organize data for camera-only analysis
+data_camera <- list(
+  y_mark = NULL,  # No marking data
+  y_sight_marked = y_sight_marked,
+  y_sight_unmarked = y_sight_unmarked,
+  X1 = NULL,  # No trap locations
+  X2 = as.matrix(X2),
+  K1 = 0,  # No marking occasions
+  K2 = K2,
+  buff = buff,
+  n_marked = n_marked,
+  G_marked = G_marked,
+  G_unmarked = G_unmarked,
+  IDlist = list(
+    ncat = n_loci,
+    nallele = rep(n_alleles, n_loci),
+    IDcovs = replicate(n_loci, 1:n_alleles, simplify = FALSE)
+  ),
+  locs = locs
+)
+
+# Model configuration for camera-only data
+input_camera <- list(
+  niter = 1000,
+  nburn = 500,
+  nthin = 2,
+  M = 100,
+  mobile_center = FALSE,  # Simplified movement model for camera-only data
+  model_choices = c(2,4),  # Only run models without movement
+  inits = list(
+    lam0_sight = 0.05,
+    sigma_d = 0.5,
+    psi = 0.5,
+    gamma = replicate(n_loci, rep(1/n_alleles, n_alleles), simplify = FALSE)
+  ),
+  obstype = c("bernoulli", "bernoulli"),
+  proppars = list(
+    lam0_sight = 0.02,
+    sigma_d = 0.1,
+    s2 = 0.3,
+    s2t = 0.1
+  ),
+  max_proppars <- list(lam0_mark = 100, lam0_sight = 100, sigma_d = 100,
+                       sigma_p = 100, s1 = 100, s2 = 100, s2t = 100),
+  min_proppars <- list(lam0_mark = .001, lam0_sight = .001, sigma_d = .001,
+                       sigma_p = .001, s1 = .001, s2 = .001, s2t = .001),
+  nswap = NA,
+  storeLatent = TRUE, 
+  storeGamma = TRUE, 
+  IDup = "Gibbs"
+)
+
+```
+
+This example shows several key differences from the full mark-resight scenario:
+
+1. Data Structure:
+   - No physical capture/marking data (`y_mark = NULL`)
+   - No trap locations (`X1 = NULL`)
+   - Typically more cameras and longer survey duration
+   
+2. Model Configuration:
+   - Simpler movement model (often `mobile_center = FALSE`)
+   - Fewer model variants to consider
+   - Different initialization values
+   
+3. Inference:
+   - Focus on spatial distribution and density
+   - Less information about movement
+   - Identification through cameras and genetics only
+
+To fit the camera-only model:
+
+```{r camera-model-fitting, eval=FALSE}
+results_camera <- SMR_wrapper(data_camera, input_camera)
+
+# View summary of results
+results_camera %>%
+  spread(model, Mean) %>%
+  arrange(Parameter)
+```
+
+Key considerations for camera-only studies:
+
+1. Camera Placement:
+   - Need good spatial coverage
+   - Consider habitat features and animal movement patterns
+   - More cameras often needed than in combined designs
+
+2. Survey Duration:
+   - Typically longer than combined designs
+   - Need sufficient resightings of marked individuals
+   - Balance between duration and closure assumptions
+
+3. Marking Process:
+   - Animals must be marked through other means
+   - Consider collaborative efforts with other projects
+   - Ensure marking is representative of population
+
+# Best Practices
+
+1. **MCMC Settings**:
+   - Run longer chains (increase `niter`) for complex models
+   - Use multiple chains to assess convergence
+   - Adjust `proppars` if acceptance rates are poor
+
+2. **Model Selection**:
+   - Start with simpler models
+   - Add complexity (movement, telemetry) only if supported by data
+   - Compare models using DIC or WAIC (when implemented)
+
+3. **Data Quality**:
+   - Ensure sufficient spatial coverage of traps/cameras
+   - Check for spatial closure assumptions
+   - Validate genetic identifications
+
+# References
+
+- Royle, J. A., & Young, K. V. (2008). A hierarchical model for spatial capture-recapture data. Ecology, 89(8), 2281-2289.
+- Sollmann, R., Gardner, B., & Belant, J. L. (2012). How does spatial study design influence density estimates from spatial capture-recapture models? PLoS One, 7(4), e34575.
