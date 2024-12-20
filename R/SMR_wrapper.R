@@ -1,3 +1,33 @@
+#' Spatial Mark-Recapture Model Wrapper
+#'
+#' @description
+#' A wrapper function that coordinates the parallel execution of multiple spatial
+#' mark-recapture (SMR) models with different combinations of telemetry and
+#' mobility settings. The function handles model selection, parallel processing,
+#' and result aggregation.
+#'
+#' @param data List. Contains capture-recapture and spatial data:
+#' \itemize{
+#'   \item X1: Optional matrix of trap locations
+#'   \item locs: Telemetry locations
+#'   \item area: Numeric study area size (for density calculation)
+#'   \item Other components required by mcmc_SMR
+#' }
+#' @param input List. Contains model settings:
+#' \itemize{
+#'   \item model_choices: Vector of model IDs to run (1-4)
+#'   \item mobile_center: Will be set based on model choice
+#'   \item Other parameters required by mcmc_SMR
+#' }
+#'
+#' @return A tibble with columns:
+#' \itemize{
+#'   \item model: Character. Model description
+#'   \item Parameter: Character. Parameter name
+#'   \item Mean: Numeric. Parameter estimate
+#' }
+#'
+#' @export
 SMR_wrapper <- function(data, input) {
 
   model_choices <- unlist(input$model_choices)
@@ -40,11 +70,8 @@ SMR_wrapper <- function(data, input) {
   system.time({
     all_out <- foreach::foreach(
       model = selected_models,
-      .packages = c("dplyr")
+      .packages = c("dplyr", "spdgt.secr.host")
     ) %dopar% {
-
-      # Remove this and use spdgt.secr.host package once it's built
-      devtools::load_all()
 
       if (model == 1) {
         # Tele, Mobile

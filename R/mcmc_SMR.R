@@ -176,7 +176,7 @@ mcmc_SMR <- function(
   y_sight_marked_noID <- data$y_sight_marked_noID
   y_sight_unk <- data$y_sight_unk
 
-  useUm <- init_useUM(data)
+  useUm <- init_useUM(data, ncat)
   nlevels <- unlist(lapply(IDcovs, length))
 
   # Define state space with buffer or vertices
@@ -1118,7 +1118,49 @@ mcmc_SMR <- function(
 ################################################################################
 # Helper Functions
 
-# Process spatial points with constraints and adjustments
+#' Process and Initialize Spatial Points for Capture-Recapture Analysis
+#'
+#' @description
+#' Initializes and processes spatial locations for individuals in a capture-recapture
+#' study, handling both marked and unmarked individuals. The function generates
+#' random starting locations, processes observed capture locations, and ensures all
+#' points fall within the defined state space.
+#'
+#' @param M Integer. Total number of individuals to process.
+#' @param state_space List. Defines the study area with components:
+#' \itemize{
+#'   \item xlim: Vector of length 2 with min, max x-coordinates
+#'   \item ylim: Vector of length 2 with min, max y-coordinates
+#'   \item useverts: Logical. If TRUE, uses vertex-defined state space
+#'   \item vertices: Matrix of vertex coordinates (required if useverts=TRUE)
+#' }
+#' @param y_sight_true Matrix. Sighting history matrix where rows represent
+#'                     individuals and columns represent occasions/locations.
+#' @param Xall Matrix. Coordinates of all sampling locations.
+#' @param y_mark Matrix. Optional marking history matrix. If provided, will be
+#'               combined with sighting data.
+#'
+#' @return Matrix. An M × 2 matrix of processed spatial coordinates where each row
+#'         contains x, y coordinates for an individual.
+#'
+#' @details
+#' The function processes spatial points in several steps:
+#'
+#' 1. Initial Point Generation:
+#'    - Randomly generates M points within xlim/ylim bounds
+#'    - Uses uniform distribution for initial placement
+#'
+#' 2. Capture Location Processing:
+#'    - Combines marking and sighting histories if both available
+#'    - For individuals with captures/sightings:
+#'      * Single capture: Uses exact capture location
+#'      * Multiple captures: Uses mean location of captures
+#'
+#' 3. State Space Validation:
+#'    - If using vertices (useverts=TRUE):
+#'      * Checks if points fall within polygon
+#'      * Regenerates points that fall outside until valid
+#'      * Uses point_in_area function for validation
 process_spatial_points <- function(M, state_space, y_sight_true, Xall,
                                    y_mark = NULL) {
   # Initialize random points within state space
@@ -1169,7 +1211,57 @@ process_spatial_points <- function(M, state_space, y_sight_true, Xall,
   return(s1)
 }
 
-# Process Genetic Data with Marking Status
+#' Process Genetic Data with Marking Status
+#'
+#' @description
+#' Processes genetic data while accounting for marking status and ID information. This function
+#' handles genetic markers for both marked and unmarked individuals, consolidates multiple
+#' observations per individual, and can impute missing genetic data based on provided probability
+#' distributions.
+#'
+#' @param M Integer. Total number of individuals in the population to be processed.
+#' @param ncat Integer. Number of genetic categories or markers being analyzed.
+#' @param n_marked Integer. Number of marked individuals in the dataset.
+#' @param G_marked Matrix. Genetic data for marked individuals, with dimensions n_marked × ncat.
+#' @param ID Vector. Individual identifiers corresponding to the genetic observations.
+#' @param G_use Matrix. Observed genetic data to be processed, with rows corresponding to observations.
+#' @param IDcovs List. List of possible values for each genetic category.
+#' @param gamma List. List of probability vectors for sampling missing genetic values.
+#' @param useUnk Logical. If TRUE, handles unknown individuals differently. Default is FALSE.
+#' @param useMarkednoID Logical. If TRUE, processes marked individuals without IDs. Default is FALSE.
+#'
+#' @return A list containing:
+#' \itemize{
+#'   \item G_true: Matrix of processed genetic data for all individuals
+#'   \item G_use: Matrix of observed genetic data (potentially modified)
+#'   \item Mark_obs: Vector of marking status (if useUnk or useMarkednoID is TRUE)
+#'   \item G_latent: Logical matrix indicating which genetic values were initially missing
+#' }
+#'
+#' @details
+#' The function performs several key operations:
+#' 1. Initializes a matrix for true genetic values using marked individual data
+#' 2. Consolidates multiple observations per individual by taking the maximum value
+#' 3. Handles special cases for unknown or unmarked individuals
+#' 4. Imputes missing genetic data using provided probability distributions
+#' 5. Ensures output consistency regardless of input dimensions
+#'
+#' When useUnk or useMarkednoID is TRUE, the function treats the last column of genetic
+#' data as marking status and processes it separately.
+#'
+#' @examples
+#' # Basic usage with marked individuals only
+#' M <- 10
+#' ncat <- 3
+#' n_marked <- 5
+#' G_marked <- matrix(c(1,2,1, 2,1,2, 1,1,1, 2,2,2, 1,2,2), nrow=5, ncol=3, byrow=TRUE)
+#' ID <- c(1,1,2,3,4,5)
+#' G_use <- matrix(c(1,2,1, 1,2,1, 2,1,2, 1,1,1, 2,2,2, 1,2,2), nrow=6, ncol=3, byrow=TRUE)
+#' IDcovs <- list(c(1,2), c(1,2), c(1,2))
+#' gamma <- list(c(0.5,0.5), c(0.5,0.5), c(0.5,0.5))
+#'
+#' result <- processGeneticData(M, ncat, n_marked, G_marked, ID, G_use, IDcovs, gamma)
+#'
 processGeneticData <- function(M, ncat, n_marked, G_marked, ID, G_use, IDcovs,
                                gamma, useUnk = FALSE, useMarkednoID = FALSE) {
   # Initialize G_true matrix
@@ -1236,8 +1328,46 @@ processGeneticData <- function(M, ncat, n_marked, G_marked, ID, G_use, IDcovs,
   ))
 }
 
-# generate unmarked useage
-init_useUM <- function(data) {
+#' Initialize Unmarked Data Usage Flag
+#'
+#' @description
+#' Initializes and validates the usage of unmarked individual data in capture-recapture studies.
+#' The function checks for the presence of unmarked individual data and ensures proper
+#' dimensionality of sighting data.
+#'
+#' @param data List. A data structure containing capture-recapture data with the following possible components:
+#' \itemize{
+#'   \item G_unmarked: Matrix of genetic data for unmarked individuals
+#'   \item y_sight_unmarked: Array of sighting data for unmarked individuals
+#' }
+#' @param ncat Integer. Number of genetic categories/markers
+#'
+#' @return Logical. TRUE if unmarked individual data should be used (G_unmarked exists in data),
+#' FALSE otherwise.
+#'
+#' @details
+#' The function performs two main operations:
+#' 1. Checks if G_unmarked exists in the input data
+#' 2. If G_unmarked exists, validates that y_sight_unmarked has 3 dimensions
+#'
+#' If G_unmarked is not present, the function creates an empty matrix with the
+#' appropriate number of columns (ncat) and returns FALSE.
+#'
+#' @examples
+#' # Example with unmarked data
+#' data <- list(
+#'   G_unmarked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3, byrow=TRUE),
+#'   y_sight_unmarked = array(0, dim=c(2,3,4))  # 2 individuals, 3 occasions, 4 sites
+#' )
+#' useUM <- init_useUM(data, ncat = 1)  # Returns TRUE
+#'
+#' # Example without unmarked data
+#' data <- list(
+#'   y_sight_marked = matrix(c(0,1,0, 1,0,1), nrow=2, ncol=3)
+#' )
+#' useUM <- init_useUM(data, ncat = 1)  # Returns FALSE
+#'
+init_useUM <- function(data, ncat) {
   if ("G_unmarked" %in% names(data)) {
     if (length(dim(data$y_sight_unmarked)) != 3) {
       stop("dim(y_sight_unmarked) must be 3. Reduced to 2 during initialization")
@@ -1251,7 +1381,52 @@ init_useUM <- function(data) {
   return(useUM)
 }
 
-# Initialize Capture Histories for Spatial Capture-Recapture
+#' Initialize Capture Histories for Spatial Capture-Recapture
+#'
+#' @description
+#' Initializes and processes spatial capture-recapture histories by assigning
+#' observations to individuals, handling both marked and unmarked individuals,
+#' and managing spatial constraints. The function processes observations in two
+#' passes: first for unmarked individuals, then for marked individuals with
+#' unknown IDs.
+#'
+#' @param y_sight_latent Array. Latent capture histories from sighting data.
+#' @param y_sight_true Array. True capture histories to be initialized.
+#' @param y_sight_marked Array. Capture histories for marked individuals.
+#' @param y_mark Array. Optional. Marking capture histories.
+#' @param status Vector. Status indicator for each capture (1 for marked, 0 for unmarked).
+#' @param ID Vector. Individual identifiers to be initialized.
+#' @param M Integer. Maximum number of individuals in the population.
+#' @param n_marked Integer. Number of marked individuals.
+#' @param n_samp_latent Integer. Number of latent samples.
+#' @param X1 Matrix. Coordinates of marking locations.
+#' @param X2 Matrix. Coordinates of sighting locations.
+#' @param G_marked Matrix. Genetic data for marked individuals.
+#' @param G_marked_noID Matrix. Genetic data for marked individuals without IDs.
+#' @param constraints Matrix. Binary matrix indicating compatible sample pairs.
+#' @param Kconstraints Matrix. Additional constraints for sample assignment.
+#' @param useMarkednoID Logical. Whether to process marked individuals without IDs. Default is TRUE.
+#' @param markedS Vector. Status indicators for marked samples.
+#'
+#' @return A list containing:
+#' \itemize{
+#'   \item y_sight_true: Array of initialized true capture histories
+#'   \item ID: Vector of assigned individual identifiers
+#' }
+#'
+#' @details
+#' The function performs initialization in multiple steps:
+#' 1. Validates input arrays
+#' 2. Processes unmarked and unknown samples:
+#'    - Identifies detection locations
+#'    - Finds candidates caught at same locations
+#'    - Applies spatial and genetic constraints
+#' 3. Processes marked individuals with unknown IDs:
+#'    - Calculates mean locations for marked individuals
+#'    - Checks genetic compatibility
+#'    - Assigns based on spatial proximity
+#' 4. Validates final assignments against constraints
+#'
 initialize_capture_histories <- function(
     y_sight_latent, y_sight_true, y_sight_marked, y_mark = NULL, status, ID, M,
     n_marked, n_samp_latent, X1, X2, G_marked, G_marked_noID, constraints,
@@ -1393,7 +1568,61 @@ initialize_capture_histories <- function(
   ))
 }
 
-# Generate Constraint Matrices for Sample Data
+#' Generate Constraint Matrices for Sample Data
+#'
+#' @description
+#' Generates constraint matrices for sample data in capture-recapture studies by evaluating
+#' genetic compatibility between samples and handling special cases for Bernoulli-type
+#' observations. The function creates constraints that prevent incompatible samples from
+#' being assigned to the same individual.
+#'
+#' @param y_sight_latent Array. Latent capture histories containing detection data.
+#' @param obstype Character. Observation type, with special handling for "bernoulli".
+#' @param G_use Matrix. Genetic data matrix where rows represent samples and columns
+#'              represent genetic markers.
+#'
+#' @return A list containing:
+#' \itemize{
+#'   \item constraints: Matrix. Binary constraint matrix where 0 indicates incompatible
+#'         sample pairs and 1 indicates compatible pairs.
+#'   \item binconstraints: Logical. TRUE if Bernoulli-specific constraints were added,
+#'         FALSE otherwise.
+#' }
+#'
+#' @details
+#' The function generates constraints in two phases:
+#'
+#' 1. Genetic Compatibility:
+#'    - Creates an n × n matrix where n is the number of samples
+#'    - Compares genetic markers between all sample pairs
+#'    - Sets constraint to 0 if samples have incompatible genetic markers
+#'
+#' 2. Bernoulli-specific Constraints (if applicable):
+#'    - Identifies samples from same trap and occasion
+#'    - Prevents assignment to same individual when detected simultaneously
+#'    - Ensures constraint matrix symmetry
+#'
+#' @examples
+#' # Create example data
+#' y_sight_latent <- array(0, dim=c(3,2,2))  # 3 samples, 2 occasions, 2 traps
+#' y_sight_latent[1,1,1] <- 1
+#' y_sight_latent[2,1,2] <- 1
+#' y_sight_latent[3,1,1] <- 1
+#'
+#' # Genetic data with 2 markers
+#' G_use <- matrix(c(
+#'   1,2,  # Sample 1
+#'   1,0,  # Sample 2
+#'   2,2   # Sample 3
+#' ), ncol=2, byrow=TRUE)
+#'
+#' # Generate constraints
+#' result <- generate_constraints(
+#'   y_sight_latent = y_sight_latent,
+#'   obstype = "bernoulli",
+#'   G_use = G_use
+#' )
+#'
 generate_constraints <- function(y_sight_latent, obstype, G_use) {
 
   n_samp_latent <- nrow(y_sight_latent)
@@ -1444,7 +1673,47 @@ generate_constraints <- function(y_sight_latent, obstype, G_use) {
 
 }
 
-# Creates a constraint matrix for marked individuals based on sighting data and marking status.
+#' Generate K-Constraints Matrix for Capture-Recapture Data
+#'
+#' @description
+#' Generates a constraint matrix that defines valid associations between marked individuals
+#' and capture events based on marking status and sighting occasions. This function
+#' is particularly useful in spatial capture-recapture studies where individuals may
+#' have different marking statuses across sampling occasions.
+#'
+#' @param data List. Contains study data, optionally including 'markedS' matrix for
+#'             marking status information.
+#' @param y_sight_latent Array. 3D array of latent capture histories with dimensions
+#'                       n_samp_latent × n_occasions × n_traps.
+#' @param n_marked Integer. Number of marked individuals in the study.
+#' @param M Integer. Total number of individuals (marked + unmarked) in the population.
+#' @param n_samp_latent Integer. Number of latent samples.
+#' @param K2 Integer. Number of secondary sampling occasions.
+#'
+#' @return Matrix. An M × n_samp_latent constraint matrix where:
+#' \itemize{
+#'   \item 0: Individual-sample combination not allowed
+#'   \item 1: Individual-sample combination allowed (standard marking)
+#'   \item 2: Individual-sample combination allowed (alternative marking status)
+#' }
+#'
+#' @details
+#' The function performs the following operations:
+#'
+#' 1. Input Validation:
+#'    - Checks data structure and types
+#'    - Validates dimensions and positive values
+#'    - Ensures compatibility of markedS matrix if provided
+#'
+#' 2. Constraint Generation:
+#'    - Initializes M × n_samp_latent constraint matrix
+#'    - Processes each marked individual against all samples
+#'    - Uses first sighting occasion to determine constraints
+#'    - Incorporates marking status from markedS matrix
+#'
+#' If markedS is not provided in the data list, all marked individuals are assumed
+#' to have standard marking status (1) for all occasions.
+#'
 generate_Kconstraints <- function(data, y_sight_latent, n_marked, M, n_samp_latent, K2) {
   # Input validation
   if (!is.list(data)) {
@@ -1494,7 +1763,79 @@ generate_Kconstraints <- function(data, y_sight_latent, n_marked, M, n_samp_late
   return(Kconstraints)
 }
 
-# Combine Genetic Data with Different Observation Types
+#' Combine Genetic Data with Different Observation Types
+#'
+#' @description
+#' Combines genetic data from different observation types (marked, unmarked, unknown)
+#' in capture-recapture studies. The function handles various combinations of data
+#' types based on the specified parameters and validates data consistency across
+#' different observation types.
+#'
+#' @param data List. A data structure containing the following components:
+#' \itemize{
+#'   \item G_unmarked: Matrix of genetic data for unmarked individuals
+#'   \item G_marked: Matrix of genetic data for marked individuals
+#'   \item G_unk: Optional matrix of genetic data for unknown status individuals
+#'   \item G_marked_noID: Optional matrix of genetic data for marked individuals without IDs
+#'   \item y_sight_unmarked: Capture histories for unmarked individuals
+#'   \item y_sight_unk: Optional capture histories for unknown status individuals
+#'   \item y_sight_marked_noID: Optional capture histories for marked individuals without IDs
+#' }
+#' @param ncat Integer. Number of genetic categories/markers. Default is 0.
+#' @param nlevels Vector. Number of levels for each genetic marker. Default is NULL.
+#' @param useUnk Logical. Whether to include unknown status individuals. Default is FALSE.
+#' @param useMarkednoID Logical. Whether to include marked individuals without IDs. Default is FALSE.
+#'
+#' @return A list containing:
+#' \itemize{
+#'   \item G_use: Combined genetic data matrix
+#'   \item G_marked: Modified genetic data for marked individuals
+#'   \item y_sight_latent: Combined capture histories
+#'   \item ncat: Updated number of genetic categories
+#'   \item nlevels: Updated number of levels per category
+#'   \item status: Vector indicating status of each individual (NULL if neither useUnk nor useMarkednoID)
+#' }
+#'
+#' @details
+#' The function performs the following operations:
+#'
+#' 1. Input Validation:
+#'    - Checks for required data components
+#'    - Validates consistency between genetic data and capture histories
+#'    - Ensures matching dimensions across matrices
+#'
+#' 2. Data Combination:
+#'    - Combines data based on useUnk and useMarkednoID parameters
+#'    - Handles three scenarios:
+#'      * Unknown status only (useUnk = TRUE, useMarkednoID = FALSE)
+#'      * Marked without ID only (useUnk = FALSE, useMarkednoID = TRUE)
+#'      * Both types (useUnk = TRUE, useMarkednoID = TRUE)
+#'    - Adds status column to genetic data when appropriate
+#'
+#' Status codes in the output:
+#' - 0: Unknown status
+#' - 1: Marked
+#' - 2: Unmarked
+#'
+#' @examples
+#' # Create example data
+#' data <- list(
+#'   G_unmarked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
+#'   G_marked = matrix(c(1,1,1, 2,2,2), nrow=2, ncol=3),
+#'   G_unk = matrix(c(1,1,2), nrow=1, ncol=3),
+#'   y_sight_unmarked = array(0, dim=c(2,3,4)),  # 2 unmarked, 3 traps, 4 occasions
+#'   y_sight_unk = array(0, dim=c(1,3,4))        # 1 unknown, 3 traps, 4 occasions
+#' )
+#'
+#' # Combine data including unknown status individuals
+#' result <- combine_genetic_data(
+#'   data = data,
+#'   ncat = 3,
+#'   nlevels = c(2,2,2),
+#'   useUnk = TRUE,
+#'   useMarkednoID = FALSE
+#' )
+#'
 combine_genetic_data <- function(
     data,
     ncat = 0,
@@ -1561,7 +1902,63 @@ combine_genetic_data <- function(
   ))
 }
 
-# Combine two matrices along 1st dimension
+#' Combine Matrices Along First Dimension
+#'
+#' @description
+#' Combines multiple arrays or matrices along their first dimension (typically rows),
+#' while preserving all other dimensions. This function handles arrays of arbitrary
+#' dimensionality (2D matrices, 3D arrays, etc.) as long as all dimensions except
+#' the first match across inputs.
+#'
+#' @param ... Arrays or matrices to be combined. All inputs must have the same number
+#'           of dimensions and matching dimensions except for the first.
+#'
+#' @return An array or matrix containing all input arrays stacked along the first
+#'         dimension, with other dimensions preserved.
+#'
+#' @details
+#' The function performs the following operations:
+#'
+#' 1. Input Validation:
+#'    - Checks that at least one matrix is provided
+#'    - Verifies all inputs have same number of dimensions
+#'    - Confirms all dimensions except the first match across inputs
+#'
+#' 2. Array Combination:
+#'    - Calculates total size needed for first dimension
+#'    - Creates zero-filled result array
+#'    - Copies each input array into the appropriate position
+#'    - Handles special cases for 2D, 3D, and 4D arrays
+#'    - Uses dynamic indexing for higher dimensions
+#'
+#' The function supports arrays of any dimension, though explicit handling is
+#' optimized for 2D-4D cases. Higher dimensional arrays are handled using
+#' more general but potentially slower methods.
+#'
+#' @examples
+#' # 2D matrices
+#' mat1 <- matrix(1:6, nrow=2, ncol=3)
+#' mat2 <- matrix(7:12, nrow=2, ncol=3)
+#' combined_2d <- combine_matrices(mat1, mat2)
+#'
+#' # 3D arrays
+#' arr1 <- array(1:12, dim=c(2,3,2))
+#' arr2 <- array(13:24, dim=c(2,3,2))
+#' combined_3d <- combine_matrices(arr1, arr2)
+#'
+#' # Mixed number of rows
+#' mat3 <- matrix(1:9, nrow=3, ncol=3)
+#' mat4 <- matrix(10:15, nrow=2, ncol=3)
+#' combined_mixed <- combine_matrices(mat3, mat4)
+#'
+#' @examples
+#' \dontrun{
+#' # Will raise an error - different number of columns
+#' mat1 <- matrix(1:6, nrow=2, ncol=3)
+#' mat2 <- matrix(7:10, nrow=2, ncol=2)
+#' combined <- combine_matrices(mat1, mat2)
+#' }
+#'
 combine_matrices <- function(...) {
   # Get list of input matrices
   matrices <- list(...)
@@ -1623,7 +2020,65 @@ combine_matrices <- function(...) {
   return(result)
 }
 
-# Define State Space for Spatial Analysis
+#' Define State Space for Spatial Analysis
+#'
+#' @description
+#' Defines the spatial state space for capture-recapture analysis using either
+#' explicitly provided vertices or a buffer around sampling locations. The function
+#' supports two methods of state space definition: polygon vertices or buffer-based
+#' boundaries.
+#'
+#' @param data List. Must contain either:
+#' \itemize{
+#'   \item vertices: Matrix of coordinates defining the state space polygon
+#'   \item buff: Numeric buffer distance to extend around sampling locations
+#' }
+#' @param Xall Matrix. Optional. Matrix of sampling location coordinates x, y.
+#'             Required when using the buffer method.
+#'
+#' @return A list containing:
+#' \itemize{
+#'   \item vertices: Matrix of coordinates defining state space boundaries
+#'   \item xlim: Vector of min, max x-coordinates
+#'   \item ylim: Vector of min, max y-coordinates
+#'   \item useverts: Logical indicating whether vertices method was used
+#' }
+#'
+#' @details
+#' The function supports two methods of defining the state space:
+#'
+#' 1. Vertices Method:
+#'    - Uses explicitly provided polygon vertices
+#'    - Calculates bounds directly from vertex coordinates
+#'    - Suitable for irregular study areas
+#'
+#' 2. Buffer Method:
+#'    - Creates rectangular state space around sampling locations
+#'    - Extends boundaries by specified buffer distance
+#'    - Requires sampling locations (Xall) to be provided
+#'    - Suitable for regular study areas
+#'
+#' @examples
+#' # Using vertices method
+#' data <- list(
+#'   vertices = matrix(c(
+#'     0,0,    # Bottom-left
+#'     10,0,   # Bottom-right
+#'     10,10,  # Top-right
+#'     0,10    # Top-left
+#'   ), ncol=2, byrow=TRUE)
+#' )
+#' state_space_vertices <- define_state_space(data)
+#'
+#' # Using buffer method
+#' data <- list(buff = 500)  # 500 unit buffer
+#' Xall <- matrix(c(
+#'   100,100,  # Trap 1
+#'   200,150,  # Trap 2
+#'   150,200   # Trap 3
+#' ), ncol=2, byrow=TRUE)
+#' state_space_buffer <- define_state_space(data, Xall)
+#'
 define_state_space <- function(data, Xall = NULL) {
   # Validate input
   if (!is.list(data)) {
@@ -1660,7 +2115,34 @@ define_state_space <- function(data, Xall = NULL) {
   ))
 }
 
-# Check inputs
+#' Validate Input Parameters for Data Analysis
+#'
+#' @description
+#' Validates input parameters for data analysis, specifically checking the compatibility
+#' between ID update methods and observation types in capture-recapture studies.
+#'
+#' @param input List. Must contain:
+#' \itemize{
+#'   \item IDup: Character. ID update method, must be either "MH" (Metropolis-Hastings) or "Gibbs"
+#'   \item obstype: Character vector. Observation types, where the second element indicates
+#'                  the observation model (e.g., "bernoulli")
+#' }
+#'
+#' @return No return value. Throws an error if validation fails.
+#'
+#' @details
+#' The function performs two validation checks:
+#' 1. Verifies that IDup is either "MH" or "Gibbs"
+#' 2. Ensures that Gibbs updates are not used with bernoulli observation types
+#'
+#' @examples
+#' # Valid input with MH updates and bernoulli observations
+#' input <- list(
+#'   IDup = "MH",
+#'   obstype = c("standard", "bernoulli")
+#' )
+#' input_check(input)  # Passes validation
+#'
 input_check <- function(input) {
 
   if (!input$IDup %in% c("MH", "Gibbs")) {
@@ -1671,7 +2153,45 @@ input_check <- function(input) {
   }
 }
 
-# Check data
+#' Validate Data Structure for Capture-Recapture Analysis
+#'
+#' @description
+#' Validates and standardizes data structures for capture-recapture analysis,
+#' checking genetic data, capture histories, and associated metadata. The function
+#' ensures data consistency and proper formatting while correcting matrix formats
+#' where possible.
+#'
+#' @param data List. Must contain:
+#' \itemize{
+#'   \item G_marked: Matrix or vector of genetic data for marked individuals
+#'   \item G_unmarked: Matrix or vector of genetic data for unmarked individuals
+#'   \item IDlist: List containing:
+#'     - IDcovs: List of genetic covariates
+#'     - ncat: Integer number of genetic categories
+#'   \item y_mark: Optional 3D array of marking capture histories
+#'   \item y_sight_marked: 3D array of sighting histories for marked individuals
+#'   \item y_sight_unmarked: 3D array of sighting histories for unmarked individuals
+#' }
+#'
+#' @return The validated and potentially reformatted data list. Matrix formats are
+#' corrected where necessary while maintaining the original data structure.
+#'
+#' @examples
+#' # Create valid data structure
+#' data <- list(
+#'   G_marked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
+#'   G_unmarked = matrix(c(1,1,1, 2,2,2), nrow=2, ncol=3),
+#'   IDlist = list(
+#'     IDcovs = list(c(1,2), c(1,2), c(1,2)),
+#'     ncat = 3
+#'   ),
+#'   y_sight_marked = array(0, dim=c(2,4,3)),    # 2 individuals, 4 occasions, 3 traps
+#'   y_sight_unmarked = array(0, dim=c(2,4,3)),  # 2 individuals, 4 occasions, 3 traps
+#'   y_mark = array(0, dim=c(2,4,3))             # 2 individuals, 4 occasions, 3 traps
+#' )
+#'
+#' # Validate data
+#' validated_data <- data_check(data)
 data_check <- function(data) {
 
   if (any(is.na(data$G_marked)) | any(is.na(data$G_unmarked))) {
@@ -1705,7 +2225,35 @@ data_check <- function(data) {
   return(data)
 }
 
-# Process group data
+#' Process Group Data Parameters
+#'
+#' @description
+#' Validates and processes group-related parameters in capture-recapture data,
+#' checking for proper dimensionality and structure. This function is typically
+#' used to process specific groups of data (e.g., unknown or marked-no-ID) within
+#' a larger capture-recapture dataset.
+#'
+#' @param data List. Must contain:
+#' \itemize{
+#'   \item IDlist: List with ncat (number of categories)
+#'   \item Additional components specified by parm and dat_name parameters
+#' }
+#' @param parm Character. Name of the parameter to process (e.g., "G_unk", "G_marked_noID")
+#' @param dat_name Character. Name of the associated data component (e.g., "y_sight_unk")
+#'
+#' @return Logical. TRUE if group data should be used (valid and present), FALSE otherwise.
+#'
+#' @examples
+#' # Create example data with valid group structure
+#' data <- list(
+#'   IDlist = list(ncat = 3),
+#'   G_unk = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
+#'   y_sight_unk = array(0, dim=c(2,4,3))  # 2 individuals, 4 occasions, 3 traps
+#' )
+#'
+#' # Process unknown group
+#' useUnk <- processGroup(data, "G_unk", "y_sight_unk")
+#'
 processGroup <- function(data, parm, dat_name) {
   useGroup <- FALSE
   if (parm %in% names(data)) {
@@ -1727,7 +2275,34 @@ processGroup <- function(data, parm, dat_name) {
   return(useGroup)
 }
 
-# Calculate Log-Likelihood
+#' Calculate Truncated Normal Log Likelihood
+#'
+#' @description
+#' Calculates the log likelihood of a value under a truncated normal distribution,
+#' given the center, bounds, and standard deviation parameters.
+#'
+#' @param value Numeric. The value at which to calculate the log likelihood.
+#' @param center Numeric. The center (mean) of the normal distribution before truncation.
+#' @param bounds Numeric vector. A vector of length 2 specifying the
+#'              bounds of the truncation.
+#' @param sigma Numeric. The standard deviation of the normal distribution.
+#'
+#' @return Numeric. The log likelihood value of the truncated normal distribution
+#'         at the specified point.
+#'
+#' @examples
+#' # Calculate log likelihood for a value within bounds
+#' value <- 1.5
+#' center <- 1.0
+#' bounds <- c(0, 2)
+#' sigma <- 0.5
+#' log_lik <- calculate_log_likelihood(value, center, bounds, sigma)
+#'
+#' # Calculate for multiple values
+#' values <- seq(0.1, 1.9, by=0.2)
+#' log_liks <- sapply(values, calculate_log_likelihood,
+#'                    center=1, bounds=c(0,2), sigma=0.5)
+#'
 calculate_log_likelihood <- function(value, center, bounds, sigma) {
   log(
     dnorm(value, center, sigma) /
@@ -1735,7 +2310,52 @@ calculate_log_likelihood <- function(value, center, bounds, sigma) {
   )
 }
 
-# Calculate Log-Likelihood
+#' Calculate Log Likelihood for Bernoulli or Poisson Observations
+#'
+#' @description
+#' Calculates the log likelihood for capture-recapture data under either a Bernoulli
+#' or Poisson observation model, accounting for detection probability and availability.
+#'
+#' @param obstype Character. Observation type, either "bernoulli" or "poisson".
+#' @param y Numeric. Number of observed captures/detections.
+#' @param K Numeric. Number of sampling occasions or effort.
+#' @param lambda Numeric. Baseline detection rate.
+#' @param z Numeric. Availability indicator (typically 0 or 1).
+#'
+#' @return Numeric. The log likelihood value under the specified observation model.
+#'
+#' @details
+#' The function computes log likelihoods using:
+#'
+#' For Bernoulli model:
+#' - Detection probability p = 1 - exp(-lambda)
+#' - Log likelihood = log(Binomial(y | K, pz))
+#'
+#' For Poisson model:
+#' - Log likelihood = log(Poisson(y | Klambda*z))
+#'
+#' The z parameter typically indicates whether an individual is available
+#' for detection (z=1) or not (z=0).
+#'
+#' @examples
+#' # Bernoulli example
+#' ll_bern <- calculate_ll_bern_pois(
+#'   obstype = "bernoulli",
+#'   y = 3,        # 3 detections
+#'   K = 10,       # 10 occasions
+#'   lambda = 0.5, # baseline rate
+#'   z = 1         # individual available
+#' )
+#'
+#' # Poisson example
+#' ll_pois <- calculate_ll_bern_pois(
+#'   obstype = "poisson",
+#'   y = 5,        # 5 detections
+#'   K = 10,       # 10 occasions
+#'   lambda = 0.5, # baseline rate
+#'   z = 1         # individual available
+#' )
+#'
 calculate_ll_bern_pois <- function(obstype, y, K, lambda, z) {
   if (obstype == "bernoulli") {
     pd <- 1 - exp(-lambda)
@@ -1746,7 +2366,55 @@ calculate_ll_bern_pois <- function(obstype, y, K, lambda, z) {
   return(ll)
 }
 
-# Calculate Pairwise Distances Between 2D Points
+#' Calculate Pairwise Euclidean Distances Between Points
+#'
+#' @description
+#' Calculates the Euclidean distances between two sets of 2D points. When only one
+#' set is provided, calculates distances between all pairs of points within that set.
+#'
+#' @param x Matrix, data frame, or vector. First set of coordinates. Must be a 2-column
+#'          matrix/data frame of coordinates, or a length-2 vector representing a single point.
+#' @param y Matrix, data frame, or vector, or NULL. Optional second set of coordinates.
+#'          Must be a 2-column matrix/data frame, or a length-2 vector. If NULL,
+#'          distances are calculated between all pairs of points in x.
+#'
+#' @return Matrix of pairwise distances where:
+#' \itemize{
+#'   \item Rows correspond to points in x
+#'   \item Columns correspond to points in y (or x if y is NULL)
+#'   \item Each element i,j is the Euclidean distance between point i in x and point j in y
+#' }
+#'
+#' @details
+#' The function performs the following operations:
+#'
+#' 1. Input Validation:
+#'    - Ensures x and y (if provided) contain 2D coordinates
+#'    - Converts single points to 1-row matrices
+#'
+#' 2. Distance Calculation:
+#'    - Uses Euclidean distance formula: sqrt((x₁-x₂)² + (y₁-y₂)²)
+#'    - Efficiently computes all pairwise distances without loops
+#'    - Returns result as a matrix
+#'
+#' When y is NULL, the function produces a symmetric matrix of
+#' distances between all pairs of points in x.
+#'
+#' @examples
+#' # Single point to multiple points
+#' point <- c(0, 0)
+#' points <- matrix(c(1,0, 0,1, 1,1), ncol=2, byrow=TRUE)
+#' distances <- pairwise_distances(point, points)
+#'
+#' # Multiple points to multiple points
+#' points1 <- matrix(c(0,0, 1,0), ncol=2, byrow=TRUE)
+#' points2 <- matrix(c(0,1, 1,1, 2,1), ncol=2, byrow=TRUE)
+#' distances <- pairwise_distances(points1, points2)
+#'
+#' # All pairwise distances within one set
+#' points <- matrix(c(0,0, 1,0, 0,1, 1,1), ncol=2, byrow=TRUE)
+#' distances <- pairwise_distances(points)
+#'
 pairwise_distances <- function(x, y = NULL) {
   # Ensure x is a 2-column matrix
   if (is.null(dim(x)) && length(x) == 2) {
@@ -1775,7 +2443,62 @@ pairwise_distances <- function(x, y = NULL) {
   matrix(dvec, nrow = nrow(x), ncol = nrow(y), byrow = FALSE)
 }
 
-# Check if a Point is Inside a Study Area
+#' Check if Point is Within State Space
+#'
+#' @description
+#' Determines whether a 2D point lies within a defined state space, which can be
+#' either a rectangular boundary or an arbitrary polygon defined by vertices.
+#'
+#' @param point Numeric vector. A vector of length 2 containing x, y coordinates
+#'             of the point to check.
+#' @param state_space List. A list defining the state space with components:
+#' \itemize{
+#'   \item useverts: Logical. If TRUE, uses polygon vertices; if FALSE, uses rectangular bounds
+#'   \item xlim: Numeric vector of length 2. min, max x-coordinates for rectangular bounds
+#'   \item ylim: Numeric vector of length 2. min, max y-coordinates for rectangular bounds
+#'   \item vertices: Matrix. Required if useverts=TRUE. Matrix of polygon vertex coordinates
+#' }
+#'
+#' @return Logical. TRUE if the point lies within the state space, FALSE otherwise.
+#'
+#' @details
+#' The function supports two methods of checking point inclusion:
+#'
+#' 1. Rectangular Bounds (useverts = FALSE):
+#'    - Uses simple coordinate comparison
+#'    - Checks if point lies within xlim and ylim ranges
+#'    - Faster but limited to rectangular areas
+#'
+#' 2. Polygon Bounds (useverts = TRUE):
+#'    - Uses point-in-polygon algorithm
+#'    - Supports arbitrary polygon shapes
+#'    - Requires sp package for robust point-in-polygon checks
+#'    - More flexible but computationally more intensive
+#'
+#' @examples
+#' # Check point in rectangular state space
+#' rect_space <- list(
+#'   useverts = FALSE,
+#'   xlim = c(0, 10),
+#'   ylim = c(0, 10)
+#' )
+#' point_in_area(c(5, 5), rect_space)  # TRUE
+#' point_in_area(c(-1, 5), rect_space) # FALSE
+#'
+#' # Check point in polygon state space
+#' poly_space <- list(
+#'   useverts = TRUE,
+#'   vertices = matrix(c(
+#'     0,0,
+#'     10,0,
+#'     10,10,
+#'     5,15,
+#'     0,10
+#'   ), ncol=2, byrow=TRUE)
+#' )
+#' point_in_area(c(5, 5), poly_space)   # TRUE
+#' point_in_area(c(5, 12), poly_space)  # TRUE
+#' point_in_area(c(-1, 5), poly_space)  # FALSE
 point_in_area <- function(point,
                           state_space) {
   # Validate inputs
@@ -1816,7 +2539,70 @@ point_in_area <- function(point,
   }
 }
 
-# Determine if a Point is Inside a Polygon
+#' Check if Point is Inside Polygon Using Ray-Casting Algorithm
+#'
+#' @description
+#' Determines whether a 2D point lies within a polygon using the ray-casting
+#' algorithm (also known as the even-odd rule or crossing number algorithm). The
+#' function automatically closes the polygon by connecting the last vertex to the first.
+#'
+#' @param point Numeric vector. A vector of length 2 containing x, y coordinates
+#'             of the point to check.
+#' @param vertices Matrix or data frame. A two-column matrix or data frame containing
+#'                the x, y coordinates of the polygon vertices in order. The polygon
+#'                does not need to be closed (the function handles this automatically).
+#'
+#' @return Logical. TRUE if the point lies within the polygon, FALSE otherwise.
+#'
+#' @details
+#' The ray-casting algorithm works by:
+#'
+#' 1. Casting a horizontal ray from the test point to the right
+#' 2. Counting the number of times this ray intersects the polygon edges
+#' 3. Using the even-odd rule to determine inclusion:
+#'    - Odd number of intersections: point is inside
+#'    - Even number of intersections: point is outside
+#'
+#' Implementation details:
+#' 1. Input Validation:
+#'    - Ensures point is a length-2 numeric vector
+#'    - Verifies vertices is a 2-column matrix/data frame
+#'
+#' 2. Polygon Preparation:
+#'    - Automatically closes the polygon by appending first vertex
+#'    - Processes edges sequentially
+#'
+#' 3. Intersection Testing:
+#'    - Tests if horizontal ray intersects each edge
+#'    - Handles special cases like vertices and horizontal edges
+#'
+#' @examples
+#' # Create a triangular polygon
+#' vertices <- matrix(c(
+#'   0,0,   # Bottom-left
+#'   2,0,   # Bottom-right
+#'   1,2    # Top
+#' ), ncol=2, byrow=TRUE)
+#'
+#' # Test points
+#' in_poly(c(1,1), vertices)    # TRUE - point inside triangle
+#' in_poly(c(0,2), vertices)    # FALSE - point outside triangle
+#' in_poly(c(1,0), vertices)    # TRUE - point on edge
+#'
+#' # Create a complex polygon
+#' vertices <- matrix(c(
+#'   0,0,    # Start
+#'   2,0,
+#'   2,2,
+#'   1,1,
+#'   0,2     # End
+#' ), ncol=2, byrow=TRUE)
+#'
+#' # Test points in complex polygon
+#' in_poly(c(0.5,0.5), vertices)  # TRUE
+#' in_poly(c(1.5,1.5), vertices)  # TRUE
+#' in_poly(c(0.5,1.5), vertices)  # FALSE
+#'
 in_poly <- function(point, vertices) {
   # Input validation
   if (!is.numeric(point) || length(point) != 2) {
