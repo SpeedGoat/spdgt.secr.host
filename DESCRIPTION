@@ -2,7 +2,7 @@ Package: spdgt.secr.host
 Type: Package
 Title: Capture-recapture Models for Host Detection
 Version: 0.0.1
-Author: c(
+Authors@R: c(
         person(given = "Guen",
            family = "Grosklos",
            role = c("aut", "cre"),
@@ -17,6 +17,12 @@ Author: c(
            email = "hans.martin@speedgoat.io"))
 Description: Code base for all capture-recapture models, including mark-recapture, spatial capture-recapture, and mark-resight
 License: MIT + file LICENSE
+Imports: 
+    dplyr,
+    doParallel,
+    foreach,
+    tibble,
+    tidyr
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
