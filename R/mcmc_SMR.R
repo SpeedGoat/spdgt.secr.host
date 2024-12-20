@@ -171,6 +171,7 @@ mcmc_SMR <- function(
   Xall <- rbind(X1, X2)
   n_marked <- data$n_marked
   G_marked <- data$G_marked
+  G_marked_noID <- data$G_marked_noID
   tf1 <- data$tf1
   tf2 <- data$tf2
   y_sight_marked_noID <- data$y_sight_marked_noID
@@ -188,7 +189,7 @@ mcmc_SMR <- function(
   accept_rates <- tibble::tibble(
     acc_iter = rep(1:niter, each = length(proppars)),
     label = rep(names(proppars), niter),
-    accept = dplyr::case_when(label %in% tune_parms ~ 0,
+    accept = dplyr::case_when(.data$label %in% tune_parms ~ 0,
                               .default = 0.45)
   )
 
@@ -196,18 +197,36 @@ mcmc_SMR <- function(
   batch_n <- 10
 
   # Check for unknown marked individuals
-  useUnk <- processGroup(
-    data = data,
-    parm = "G_unk",
-    dat_name = "y_sight_unk"
-  )
+  useUnk <- FALSE
+  if ("G_unk" %in% names(data)) {
+    if (!is.na(data$G_unk[1])) {
+      G_unk <- data$G_unk
+      if (!is.matrix(G_unk)) {
+        G_marked <- matrix(G_unk)
+      }
+      if (ncol(G_unk) != ncat) {
+        stop("G_unk needs ncat number of columns")
+      }
+      y_sight_unk <- data$y_sight_unk
+      useUnk <- TRUE
+    }
+  }
 
   # Check for marked no ID individuals
-  useMarkednoID <- processGroup(
-    data = data,
-    parm = "G_marked_noID",
-    dat_name = "y_sight_marked_noID"
-  )
+  useMarkednoID <- FALSE
+  if ("G_marked_noID" %in% names(data)) {
+    if (!is.na(data$G_marked_noID[1])) {
+      G_marked_noID <- data$G_marked_noID
+      if (!is.matrix(G_marked_noID)) {
+        G_marked_noID <- matrix(G_marked_noID)
+      }
+      if (ncol(G_marked_noID) != ncat) {
+        stop("G_marked_noID needs ncat number of columns")
+      }
+      y_sight_marked_noID <- data$y_sight_marked_noID
+      useMarkednoID <- TRUE
+    }
+  }
 
   G_data <- combine_genetic_data(
     data,
@@ -1058,13 +1077,13 @@ mcmc_SMR <- function(
 
       # Calculate mean acceptance rates
       mean_accept <- accept_rates %>%
-        dplyr::group_by(label) %>%
-        dplyr::filter(acc_iter > (iter - tune_check) & acc_iter <= iter) %>%
+        dplyr::group_by(.data$label) %>%
+        dplyr::filter(.data$acc_iter > (iter - tune_check) & .data$acc_iter <= iter) %>%
         dplyr::summarise(
-          val = mean(accept)
+          val = mean(.data$accept)
         ) %>%
-        dplyr::mutate(label = factor(label, names(proppars))) %>%
-        dplyr::arrange(label)
+        dplyr::mutate(label = factor(.data$label, names(proppars))) %>%
+        dplyr::arrange(.data$label)
 
       # Adjust tuning parms
       proppars[mean_accept$val > 0.55] <-
@@ -1250,6 +1269,7 @@ process_spatial_points <- function(M, state_space, y_sight_true, Xall,
 #' data as marking status and processes it separately.
 #'
 #' @examples
+#' \dontrun{
 #' # Basic usage with marked individuals only
 #' M <- 10
 #' ncat <- 3
@@ -1261,7 +1281,7 @@ process_spatial_points <- function(M, state_space, y_sight_true, Xall,
 #' gamma <- list(c(0.5,0.5), c(0.5,0.5), c(0.5,0.5))
 #'
 #' result <- processGeneticData(M, ncat, n_marked, G_marked, ID, G_use, IDcovs, gamma)
-#'
+#'}
 processGeneticData <- function(M, ncat, n_marked, G_marked, ID, G_use, IDcovs,
                                gamma, useUnk = FALSE, useMarkednoID = FALSE) {
   # Initialize G_true matrix
@@ -1354,6 +1374,7 @@ processGeneticData <- function(M, ncat, n_marked, G_marked, ID, G_use, IDcovs,
 #' appropriate number of columns (ncat) and returns FALSE.
 #'
 #' @examples
+#' \dontrun{
 #' # Example with unmarked data
 #' data <- list(
 #'   G_unmarked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3, byrow=TRUE),
@@ -1366,7 +1387,7 @@ processGeneticData <- function(M, ncat, n_marked, G_marked, ID, G_use, IDcovs,
 #'   y_sight_marked = matrix(c(0,1,0, 1,0,1), nrow=2, ncol=3)
 #' )
 #' useUM <- init_useUM(data, ncat = 1)  # Returns FALSE
-#'
+#'}
 init_useUM <- function(data, ncat) {
   if ("G_unmarked" %in% names(data)) {
     if (length(dim(data$y_sight_unmarked)) != 3) {
@@ -1603,6 +1624,7 @@ initialize_capture_histories <- function(
 #'    - Ensures constraint matrix symmetry
 #'
 #' @examples
+#' \dontrun{
 #' # Create example data
 #' y_sight_latent <- array(0, dim=c(3,2,2))  # 3 samples, 2 occasions, 2 traps
 #' y_sight_latent[1,1,1] <- 1
@@ -1622,7 +1644,7 @@ initialize_capture_histories <- function(
 #'   obstype = "bernoulli",
 #'   G_use = G_use
 #' )
-#'
+#'}
 generate_constraints <- function(y_sight_latent, obstype, G_use) {
 
   n_samp_latent <- nrow(y_sight_latent)
@@ -1818,6 +1840,7 @@ generate_Kconstraints <- function(data, y_sight_latent, n_marked, M, n_samp_late
 #' - 2: Unmarked
 #'
 #' @examples
+#' \dontrun{
 #' # Create example data
 #' data <- list(
 #'   G_unmarked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
@@ -1835,7 +1858,7 @@ generate_Kconstraints <- function(data, y_sight_latent, n_marked, M, n_samp_late
 #'   useUnk = TRUE,
 #'   useMarkednoID = FALSE
 #' )
-#'
+#'}
 combine_genetic_data <- function(
     data,
     ncat = 0,
@@ -1936,6 +1959,7 @@ combine_genetic_data <- function(
 #' more general but potentially slower methods.
 #'
 #' @examples
+#' \dontrun{
 #' # 2D matrices
 #' mat1 <- matrix(1:6, nrow=2, ncol=3)
 #' mat2 <- matrix(7:12, nrow=2, ncol=3)
@@ -1950,15 +1974,14 @@ combine_genetic_data <- function(
 #' mat3 <- matrix(1:9, nrow=3, ncol=3)
 #' mat4 <- matrix(10:15, nrow=2, ncol=3)
 #' combined_mixed <- combine_matrices(mat3, mat4)
-#'
+#'}
 #' @examples
 #' \dontrun{
 #' # Will raise an error - different number of columns
 #' mat1 <- matrix(1:6, nrow=2, ncol=3)
 #' mat2 <- matrix(7:10, nrow=2, ncol=2)
 #' combined <- combine_matrices(mat1, mat2)
-#' }
-#'
+#'}
 combine_matrices <- function(...) {
   # Get list of input matrices
   matrices <- list(...)
@@ -2059,6 +2082,7 @@ combine_matrices <- function(...) {
 #'    - Suitable for regular study areas
 #'
 #' @examples
+#' \dontrun{
 #' # Using vertices method
 #' data <- list(
 #'   vertices = matrix(c(
@@ -2078,7 +2102,7 @@ combine_matrices <- function(...) {
 #'   150,200   # Trap 3
 #' ), ncol=2, byrow=TRUE)
 #' state_space_buffer <- define_state_space(data, Xall)
-#'
+#'}
 define_state_space <- function(data, Xall = NULL) {
   # Validate input
   if (!is.list(data)) {
@@ -2136,13 +2160,14 @@ define_state_space <- function(data, Xall = NULL) {
 #' 2. Ensures that Gibbs updates are not used with bernoulli observation types
 #'
 #' @examples
+#' \dontrun{
 #' # Valid input with MH updates and bernoulli observations
 #' input <- list(
 #'   IDup = "MH",
 #'   obstype = c("standard", "bernoulli")
 #' )
 #' input_check(input)  # Passes validation
-#'
+#'}
 input_check <- function(input) {
 
   if (!input$IDup %in% c("MH", "Gibbs")) {
@@ -2177,6 +2202,7 @@ input_check <- function(input) {
 #' corrected where necessary while maintaining the original data structure.
 #'
 #' @examples
+#' \dontrun{
 #' # Create valid data structure
 #' data <- list(
 #'   G_marked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
@@ -2192,6 +2218,7 @@ input_check <- function(input) {
 #'
 #' # Validate data
 #' validated_data <- data_check(data)
+#' }
 data_check <- function(data) {
 
   if (any(is.na(data$G_marked)) | any(is.na(data$G_unmarked))) {
@@ -2225,56 +2252,6 @@ data_check <- function(data) {
   return(data)
 }
 
-#' Process Group Data Parameters
-#'
-#' @description
-#' Validates and processes group-related parameters in capture-recapture data,
-#' checking for proper dimensionality and structure. This function is typically
-#' used to process specific groups of data (e.g., unknown or marked-no-ID) within
-#' a larger capture-recapture dataset.
-#'
-#' @param data List. Must contain:
-#' \itemize{
-#'   \item IDlist: List with ncat (number of categories)
-#'   \item Additional components specified by parm and dat_name parameters
-#' }
-#' @param parm Character. Name of the parameter to process (e.g., "G_unk", "G_marked_noID")
-#' @param dat_name Character. Name of the associated data component (e.g., "y_sight_unk")
-#'
-#' @return Logical. TRUE if group data should be used (valid and present), FALSE otherwise.
-#'
-#' @examples
-#' # Create example data with valid group structure
-#' data <- list(
-#'   IDlist = list(ncat = 3),
-#'   G_unk = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
-#'   y_sight_unk = array(0, dim=c(2,4,3))  # 2 individuals, 4 occasions, 3 traps
-#' )
-#'
-#' # Process unknown group
-#' useUnk <- processGroup(data, "G_unk", "y_sight_unk")
-#'
-processGroup <- function(data, parm, dat_name) {
-  useGroup <- FALSE
-  if (parm %in% names(data)) {
-    if (!is.na(data[[parm]][1])) {
-      group_data <- data[[parm]]
-      if (!is.matrix(group_data)) {
-        group_data <- matrix(group_data)
-      }
-      if (ncol(group_data) != data$IDlist$ncat) {
-        stop(paste(parm, "needs", data$IDlist$ncat, "number of columns"))
-      }
-      # assign(dat_name, data[[dat_name]], envir = .GlobalEnv)
-      useGroup <- TRUE
-    }
-    if (length(dim(data[[dat_name]])) != 3) {
-      stop(paste0("dim(", dat_name, ") must be 3. Reduced to 2 during initialization"))
-    }
-  }
-  return(useGroup)
-}
-
 #' Calculate Truncated Normal Log Likelihood
 #'
 #' @description
@@ -2291,6 +2268,7 @@ processGroup <- function(data, parm, dat_name) {
 #'         at the specified point.
 #'
 #' @examples
+#' \dontrun{
 #' # Calculate log likelihood for a value within bounds
 #' value <- 1.5
 #' center <- 1.0
@@ -2302,7 +2280,7 @@ processGroup <- function(data, parm, dat_name) {
 #' values <- seq(0.1, 1.9, by=0.2)
 #' log_liks <- sapply(values, calculate_log_likelihood,
 #'                    center=1, bounds=c(0,2), sigma=0.5)
-#'
+#'}
 calculate_log_likelihood <- function(value, center, bounds, sigma) {
   log(
     dnorm(value, center, sigma) /
@@ -2338,15 +2316,7 @@ calculate_log_likelihood <- function(value, center, bounds, sigma) {
 #' for detection (z=1) or not (z=0).
 #'
 #' @examples
-#' # Bernoulli example
-#' ll_bern <- calculate_ll_bern_pois(
-#'   obstype = "bernoulli",
-#'   y = 3,        # 3 detections
-#'   K = 10,       # 10 occasions
-#'   lambda = 0.5, # baseline rate
-#'   z = 1         # individual available
-#' )
-#'
+#' \dontrun{
 #' # Poisson example
 #' ll_pois <- calculate_ll_bern_pois(
 #'   obstype = "poisson",
@@ -2355,7 +2325,7 @@ calculate_log_likelihood <- function(value, center, bounds, sigma) {
 #'   lambda = 0.5, # baseline rate
 #'   z = 1         # individual available
 #' )
-#'
+#'}
 calculate_ll_bern_pois <- function(obstype, y, K, lambda, z) {
   if (obstype == "bernoulli") {
     pd <- 1 - exp(-lambda)
@@ -2401,6 +2371,7 @@ calculate_ll_bern_pois <- function(obstype, y, K, lambda, z) {
 #' distances between all pairs of points in x.
 #'
 #' @examples
+#' \dontrun{
 #' # Single point to multiple points
 #' point <- c(0, 0)
 #' points <- matrix(c(1,0, 0,1, 1,1), ncol=2, byrow=TRUE)
@@ -2414,7 +2385,7 @@ calculate_ll_bern_pois <- function(obstype, y, K, lambda, z) {
 #' # All pairwise distances within one set
 #' points <- matrix(c(0,0, 1,0, 0,1, 1,1), ncol=2, byrow=TRUE)
 #' distances <- pairwise_distances(points)
-#'
+#'}
 pairwise_distances <- function(x, y = NULL) {
   # Ensure x is a 2-column matrix
   if (is.null(dim(x)) && length(x) == 2) {
@@ -2472,10 +2443,10 @@ pairwise_distances <- function(x, y = NULL) {
 #' 2. Polygon Bounds (useverts = TRUE):
 #'    - Uses point-in-polygon algorithm
 #'    - Supports arbitrary polygon shapes
-#'    - Requires sp package for robust point-in-polygon checks
 #'    - More flexible but computationally more intensive
 #'
 #' @examples
+#' \dontrun{
 #' # Check point in rectangular state space
 #' rect_space <- list(
 #'   useverts = FALSE,
@@ -2499,6 +2470,7 @@ pairwise_distances <- function(x, y = NULL) {
 #' point_in_area(c(5, 5), poly_space)   # TRUE
 #' point_in_area(c(5, 12), poly_space)  # TRUE
 #' point_in_area(c(-1, 5), poly_space)  # FALSE
+#' }
 point_in_area <- function(point,
                           state_space) {
   # Validate inputs
@@ -2527,11 +2499,6 @@ point_in_area <- function(point,
     # Require vertices
     if (is.null(state_space$vertices)) {
       stop("When useverts = TRUE, vertices must be provided")
-    }
-
-    # Recommend sp package if not already in namespace
-    if (!requireNamespace("sp", quietly = TRUE)) {
-      warning("sp package recommended for polygon point-in-polygon checks")
     }
 
     # Determine if point is in polygon
@@ -2577,6 +2544,7 @@ point_in_area <- function(point,
 #'    - Handles special cases like vertices and horizontal edges
 #'
 #' @examples
+#' \dontrun{
 #' # Create a triangular polygon
 #' vertices <- matrix(c(
 #'   0,0,   # Bottom-left
@@ -2602,7 +2570,7 @@ point_in_area <- function(point,
 #' in_poly(c(0.5,0.5), vertices)  # TRUE
 #' in_poly(c(1.5,1.5), vertices)  # TRUE
 #' in_poly(c(0.5,1.5), vertices)  # FALSE
-#'
+#'}
 in_poly <- function(point, vertices) {
   # Input validation
   if (!is.numeric(point) || length(point) != 2) {

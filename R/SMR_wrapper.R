@@ -60,8 +60,8 @@ SMR_wrapper <- function(data, input) {
 
   # Filter IDs based on selected combinations
   selected_models <- all_models %>%
-    dplyr::filter(ID %in% model_choices) %>%
-    dplyr::pull(ID)
+    dplyr::filter(.data$ID %in% model_choices) %>%
+    dplyr::pull(.data$ID)
 
   my_cluster <- parallel::makeCluster(6, type = "PSOCK")
   #register cluster to be used by %dopar%
@@ -69,28 +69,28 @@ SMR_wrapper <- function(data, input) {
 
   system.time({
     all_out <- foreach::foreach(
-      model = selected_models,
+      mm = selected_models,
       .packages = c("dplyr", "spdgt.secr.host")
     ) %dopar% {
 
-      if (model == 1) {
+      if (mm == 1) {
         # Tele, Mobile
         input$mobile_center <- T
 
         out <- mcmc_SMR(data, input)
 
         tibble::as_tibble(out$out) %>%
-          dplyr::mutate(model = all_models$Name[model])
+          dplyr::mutate(model = all_models$Name[mm])
 
-      } else if (model == 2) {
+      } else if (mm == 2) {
         # Tele, No Mobile
         input$mobile_center <- F
 
         out <- mcmc_SMR(data, input)
 
         tibble::as_tibble(out$out) %>%
-          dplyr::mutate(model = all_models$Name[model])
-      } else if (model == 3) {
+          dplyr::mutate(model = all_models$Name[mm])
+      } else if (mm == 3) {
         # No Tele, Mobile
         data_no_tele <- data
         data_no_tele$locs <- NA
@@ -100,8 +100,8 @@ SMR_wrapper <- function(data, input) {
         out <- mcmc_SMR(data_no_tele, input)
 
         tibble::as_tibble(out$out) %>%
-          dplyr::mutate(model = all_models$Name[model])
-      } else if (model == 4) {
+          dplyr::mutate(model = all_models$Name[mm])
+      } else if (mm == 4) {
         # No Tele, No Mobile
         data_no_tele <- data
         data_no_tele$locs <- NA
@@ -111,19 +111,19 @@ SMR_wrapper <- function(data, input) {
         out <- mcmc_SMR(data_no_tele, input)
 
         tibble::as_tibble(out$out) %>%
-          dplyr::mutate(model = all_models$Name[model])
+          dplyr::mutate(model = all_models$Name[mm])
       }
     }
   }) # Time stop
   # Stop cluster
-  stopCluster(my_cluster)
+  parallel::stopCluster(my_cluster)
 
   final_out <- dplyr::bind_rows(all_out) %>%
     dplyr::mutate(
-      D = N * 100 / area
+      D = .data$N * 100 / .data$area
     ) %>%
     tidyr::pivot_longer(
-      cols = -model,
+      cols = -.data$model,
       names_to = "Parameter",
       values_to = "Mean"
     )
