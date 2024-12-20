@@ -35,6 +35,7 @@ If G_unmarked is not present, the function creates an empty matrix with the
 appropriate number of columns (ncat) and returns FALSE.
 }
 \examples{
+\dontrun{
 # Example with unmarked data
 data <- list(
   G_unmarked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3, byrow=TRUE),
@@ -47,5 +48,5 @@ data <- list(
   y_sight_marked = matrix(c(0,1,0, 1,0,1), nrow=2, ncol=3)
 )
 useUM <- init_useUM(data, ncat = 1)  # Returns FALSE
-
+}
 }

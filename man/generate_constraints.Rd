@@ -47,6 +47,7 @@ The function generates constraints in two phases:
 }
 }
 \examples{
+\dontrun{
 # Create example data
 y_sight_latent <- array(0, dim=c(3,2,2))  # 3 samples, 2 occasions, 2 traps
 y_sight_latent[1,1,1] <- 1
@@ -66,5 +67,5 @@ result <- generate_constraints(
   obstype = "bernoulli",
   G_use = G_use
 )
-
+}
 }

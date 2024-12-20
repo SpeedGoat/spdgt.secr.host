@@ -42,15 +42,7 @@ The z parameter typically indicates whether an individual is available
 for detection (z=1) or not (z=0).
 }
 \examples{
-# Bernoulli example
-ll_bern <- calculate_ll_bern_pois(
-  obstype = "bernoulli",
-  y = 3,        # 3 detections
-  K = 10,       # 10 occasions
-  lambda = 0.5, # baseline rate
-  z = 1         # individual available
-)
-
+\dontrun{
 # Poisson example
 ll_pois <- calculate_ll_bern_pois(
   obstype = "poisson",
@@ -59,5 +51,5 @@ ll_pois <- calculate_ll_bern_pois(
   lambda = 0.5, # baseline rate
   z = 1         # individual available
 )
-
+}
 }

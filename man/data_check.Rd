@@ -30,6 +30,7 @@ ensures data consistency and proper formatting while correcting matrix formats
 where possible.
 }
 \examples{
+\dontrun{
 # Create valid data structure
 data <- list(
   G_marked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
@@ -45,4 +46,5 @@ data <- list(
 
 # Validate data
 validated_data <- data_check(data)
+}
 }

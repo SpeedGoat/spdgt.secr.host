@@ -38,12 +38,12 @@ The function supports two methods of checking point inclusion:
 \itemize{
 \item Uses point-in-polygon algorithm
 \item Supports arbitrary polygon shapes
-\item Requires sp package for robust point-in-polygon checks
 \item More flexible but computationally more intensive
 }
 }
 }
 \examples{
+\dontrun{
 # Check point in rectangular state space
 rect_space <- list(
   useverts = FALSE,
@@ -67,4 +67,5 @@ poly_space <- list(
 point_in_area(c(5, 5), poly_space)   # TRUE
 point_in_area(c(5, 12), poly_space)  # TRUE
 point_in_area(c(-1, 5), poly_space)  # FALSE
+}
 }

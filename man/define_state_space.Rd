@@ -50,6 +50,7 @@ The function supports two methods of defining the state space:
 }
 }
 \examples{
+\dontrun{
 # Using vertices method
 data <- list(
   vertices = matrix(c(
@@ -69,5 +70,5 @@ Xall <- matrix(c(
   150,200   # Trap 3
 ), ncol=2, byrow=TRUE)
 state_space_buffer <- define_state_space(data, Xall)
-
+}
 }

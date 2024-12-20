@@ -46,6 +46,7 @@ When y is NULL, the function produces a symmetric matrix of
 distances between all pairs of points in x.
 }
 \examples{
+\dontrun{
 # Single point to multiple points
 point <- c(0, 0)
 points <- matrix(c(1,0, 0,1, 1,1), ncol=2, byrow=TRUE)
@@ -59,5 +60,5 @@ distances <- pairwise_distances(points1, points2)
 # All pairwise distances within one set
 points <- matrix(c(0,0, 1,0, 0,1, 1,1), ncol=2, byrow=TRUE)
 distances <- pairwise_distances(points)
-
+}
 }

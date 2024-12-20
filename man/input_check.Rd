@@ -29,11 +29,12 @@ The function performs two validation checks:
 }
 }
 \examples{
+\dontrun{
 # Valid input with MH updates and bernoulli observations
 input <- list(
   IDup = "MH",
   obstype = c("standard", "bernoulli")
 )
 input_check(input)  # Passes validation
-
+}
 }

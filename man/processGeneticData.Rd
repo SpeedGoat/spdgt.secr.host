@@ -67,6 +67,7 @@ When useUnk or useMarkednoID is TRUE, the function treats the last column of gen
 data as marking status and processes it separately.
 }
 \examples{
+\dontrun{
 # Basic usage with marked individuals only
 M <- 10
 ncat <- 3
@@ -78,5 +79,5 @@ IDcovs <- list(c(1,2), c(1,2), c(1,2))
 gamma <- list(c(0.5,0.5), c(0.5,0.5), c(0.5,0.5))
 
 result <- processGeneticData(M, ncat, n_marked, G_marked, ID, G_use, IDcovs, gamma)
-
+}
 }

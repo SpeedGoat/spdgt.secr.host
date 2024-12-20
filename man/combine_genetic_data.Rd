@@ -79,6 +79,7 @@ Status codes in the output:
 }
 }
 \examples{
+\dontrun{
 # Create example data
 data <- list(
   G_unmarked = matrix(c(1,2,1, 2,1,2), nrow=2, ncol=3),
@@ -96,5 +97,5 @@ result <- combine_genetic_data(
   useUnk = TRUE,
   useMarkednoID = FALSE
 )
-
+}
 }

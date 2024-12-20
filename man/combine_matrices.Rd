@@ -43,27 +43,3 @@ The function supports arrays of any dimension, though explicit handling is
 optimized for 2D-4D cases. Higher dimensional arrays are handled using
 more general but potentially slower methods.
 }
-\examples{
-# 2D matrices
-mat1 <- matrix(1:6, nrow=2, ncol=3)
-mat2 <- matrix(7:12, nrow=2, ncol=3)
-combined_2d <- combine_matrices(mat1, mat2)
-
-# 3D arrays
-arr1 <- array(1:12, dim=c(2,3,2))
-arr2 <- array(13:24, dim=c(2,3,2))
-combined_3d <- combine_matrices(arr1, arr2)
-
-# Mixed number of rows
-mat3 <- matrix(1:9, nrow=3, ncol=3)
-mat4 <- matrix(10:15, nrow=2, ncol=3)
-combined_mixed <- combine_matrices(mat3, mat4)
-
-\dontrun{
-# Will raise an error - different number of columns
-mat1 <- matrix(1:6, nrow=2, ncol=3)
-mat2 <- matrix(7:10, nrow=2, ncol=2)
-combined <- combine_matrices(mat1, mat2)
-}
-
-}

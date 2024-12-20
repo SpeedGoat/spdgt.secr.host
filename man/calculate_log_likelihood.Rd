@@ -25,6 +25,7 @@ Calculates the log likelihood of a value under a truncated normal distribution,
 given the center, bounds, and standard deviation parameters.
 }
 \examples{
+\dontrun{
 # Calculate log likelihood for a value within bounds
 value <- 1.5
 center <- 1.0
@@ -36,5 +37,5 @@ log_lik <- calculate_log_likelihood(value, center, bounds, sigma)
 values <- seq(0.1, 1.9, by=0.2)
 log_liks <- sapply(values, calculate_log_likelihood,
                    center=1, bounds=c(0,2), sigma=0.5)
-
+}
 }

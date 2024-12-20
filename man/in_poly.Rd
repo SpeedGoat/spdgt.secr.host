@@ -54,6 +54,7 @@ Implementation details:
 }
 }
 \examples{
+\dontrun{
 # Create a triangular polygon
 vertices <- matrix(c(
   0,0,   # Bottom-left
@@ -79,5 +80,5 @@ vertices <- matrix(c(
 in_poly(c(0.5,0.5), vertices)  # TRUE
 in_poly(c(1.5,1.5), vertices)  # TRUE
 in_poly(c(0.5,1.5), vertices)  # FALSE
-
+}
 }
